@@ -132,6 +132,13 @@ export class BatchMoveSymbolsOperation {
         );
         mergeFilesChanged(filesChanged, importRewriteChanges);
 
+        const sourceReferenceImportChanges =
+          await this.ensureSourceImportsForRemainingReferences(
+            sourceFile,
+            completedMoves,
+          );
+        mergeFilesChanged(filesChanged, sourceReferenceImportChanges);
+
         if (
           validated.preserveSourceFacadeExports &&
           validated.preferFacadeImports
@@ -147,6 +154,10 @@ export class BatchMoveSymbolsOperation {
         const destinationImportCleanupChanges =
           await this.removeDestinationSelfImports(sourceFile, validated.moves);
         mergeFilesChanged(filesChanged, destinationImportCleanupChanges);
+
+        const artifactCleanupChanges =
+          await this.cleanGeneratedImportArtifacts(filesChanged);
+        mergeFilesChanged(filesChanged, artifactCleanupChanges);
       }
 
       if (validated.organizeImports && !validated.preview) {
@@ -252,6 +263,213 @@ export class BatchMoveSymbolsOperation {
     }
 
     return filesChanged;
+  }
+
+  private async ensureSourceImportsForRemainingReferences(
+    sourceFile: string,
+    moves: CompletedMove[],
+  ): Promise<RefactorResult['filesChanged']> {
+    if (moves.length === 0) return [];
+
+    const originalContent = await readFile(sourceFile, 'utf-8');
+    const bodyContent = this.stripImportExportStatements(originalContent);
+    const symbolsByDestination = new Map<
+      string,
+      { typeOnly: string[]; values: string[] }
+    >();
+
+    for (const move of moves) {
+      if (!this.containsIdentifier(bodyContent, move.symbol)) continue;
+      if (this.hasLocalDeclaration(originalContent, move.symbol)) continue;
+      if (this.hasNamedImport(originalContent, move.symbol)) continue;
+
+      const entry = symbolsByDestination.get(move.destinationPath) ?? {
+        typeOnly: [],
+        values: [],
+      };
+
+      if (
+        move.declaration.kind === 'type' ||
+        move.declaration.kind === 'interface'
+      ) {
+        entry.typeOnly.push(move.symbol);
+      } else {
+        entry.values.push(move.symbol);
+      }
+
+      symbolsByDestination.set(move.destinationPath, entry);
+    }
+
+    if (symbolsByDestination.size === 0) return [];
+
+    const importLines: string[] = [];
+    for (const [destinationPath, symbols] of symbolsByDestination) {
+      const moduleSpecifier = this.buildRelativeModuleSpecifier(
+        sourceFile,
+        destinationPath,
+        '',
+      );
+
+      if (symbols.values.length > 0) {
+        importLines.push(
+          `import { ${symbols.values.join(', ')} } from "${moduleSpecifier}";`,
+        );
+      }
+
+      if (symbols.typeOnly.length > 0) {
+        importLines.push(
+          `import type { ${symbols.typeOnly.join(', ')} } from "${moduleSpecifier}";`,
+        );
+      }
+    }
+
+    const content = this.insertImports(originalContent, importLines);
+    if (content === originalContent) return [];
+
+    await writeFile(sourceFile, content, 'utf-8');
+
+    return [
+      {
+        file: basename(sourceFile),
+        path: sourceFile,
+        edits: [
+          {
+            line: 1,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      },
+    ];
+  }
+
+  private async cleanGeneratedImportArtifacts(
+    filesChanged: RefactorResult['filesChanged'],
+  ): Promise<RefactorResult['filesChanged']> {
+    const paths = new Set(
+      filesChanged
+        .map((fileChange) => fileChange.path)
+        .filter((filePath) => /\.[cm]?[tj]sx?$/.test(filePath)),
+    );
+    const cleanupChanges: RefactorResult['filesChanged'] = [];
+
+    for (const filePath of paths) {
+      const originalContent = await readFile(filePath, 'utf-8');
+      const content = this.cleanImportArtifacts(originalContent);
+
+      if (content === originalContent) continue;
+
+      await writeFile(filePath, content, 'utf-8');
+      cleanupChanges.push({
+        file: basename(filePath),
+        path: filePath,
+        edits: [
+          {
+            line: 1,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      });
+    }
+
+    return cleanupChanges;
+  }
+
+  private cleanImportArtifacts(content: string): string {
+    return this.removeUndefinedNamedImports(
+      content.replace(/\btype\s+type\b/g, 'type'),
+    );
+  }
+
+  private removeUndefinedNamedImports(content: string): string {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+
+    return content.replace(
+      importPattern,
+      (fullMatch, typeKeyword, namedImports, quote, moduleSpecifier) => {
+        const originalImports =
+          this.parseNamedImportsWithoutCleanup(namedImports);
+        const imports = originalImports.filter(
+          (importedSymbol) =>
+            this.getImportedName(importedSymbol) !== 'undefined',
+        );
+
+        if (imports.length === originalImports.length) return fullMatch;
+        if (imports.length === 0) return '';
+
+        return `import ${typeKeyword ?? ''}{ ${imports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`;
+      },
+    );
+  }
+
+  private stripImportExportStatements(content: string): string {
+    return content
+      .replace(/^\s*import\b[\s\S]*?;\s*$/gm, '')
+      .replace(
+        /^\s*export\s+(?:type\s+)?\{[\s\S]*?\}\s+from\b[\s\S]*?;\s*$/gm,
+        '',
+      )
+      .replace(/^\s*export\s+\*\s+from\b[\s\S]*?;\s*$/gm, '');
+  }
+
+  private containsIdentifier(content: string, symbol: string): boolean {
+    const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escapedSymbol}\\b`).test(content);
+  }
+
+  private hasLocalDeclaration(content: string, symbol: string): boolean {
+    const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(
+      `\\b(?:function|class|interface|type|enum|const|let|var)\\s+${escapedSymbol}\\b`,
+    ).test(content);
+  }
+
+  private hasNamedImport(content: string, symbol: string): boolean {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+
+    for (const match of content.matchAll(importPattern)) {
+      const namedImports = match[2] ?? '';
+      if (
+        this.parseNamedImports(namedImports).some(
+          (importedSymbol) => this.getImportedName(importedSymbol) === symbol,
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private insertImports(content: string, importLines: string[]): string {
+    const lines = content.split(/\r?\n/);
+    let insertAt = 0;
+
+    while (insertAt < lines.length) {
+      const line = lines[insertAt] ?? '';
+      if (
+        line.trim() === '' ||
+        line.trim().startsWith('import ') ||
+        line.trim().startsWith('/*') ||
+        line.trim().startsWith('*') ||
+        line.trim().startsWith('//')
+      ) {
+        insertAt += 1;
+        continue;
+      }
+      break;
+    }
+
+    const prefixBlank =
+      insertAt > 0 && lines[insertAt - 1]?.trim() !== '' ? [''] : [];
+    lines.splice(insertAt, 0, ...importLines, ...prefixBlank);
+
+    return lines.join('\n');
   }
 
   private async preserveSourceFacadeExports(
@@ -566,11 +784,16 @@ export class BatchMoveSymbolsOperation {
   }
 
   private parseNamedImports(namedImports: string): string[] {
+    return this.parseNamedImportsWithoutCleanup(namedImports).filter(
+      (part) => this.getImportedName(part) !== 'undefined',
+    );
+  }
+
+  private parseNamedImportsWithoutCleanup(namedImports: string): string[] {
     return namedImports
       .split(',')
       .map((part: string) => part.trim())
-      .filter(Boolean)
-      .filter((part) => this.getImportedName(part) !== 'undefined');
+      .filter(Boolean);
   }
 
   private getImportedName(importedSymbol: string): string | undefined {

@@ -415,6 +415,46 @@ export function gamma() {
     expect(await readFile(betaPath, 'utf-8')).toContain('function beta');
   });
 
+  it('should import a moved symbol back into the source file when the source still uses it', async () => {
+    const sourcePath = join(testDir, 'src', 'tick-source.ts');
+    const destinationPath = join(testDir, 'src', 'tick', 'advanceAgent.ts');
+    await mkdir(join(testDir, 'src', 'tick'), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `export function advanceAgent() {
+  return 1;
+}
+
+export function advanceRegion() {
+  return advanceAgent() + 1;
+}
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      organizeImports: true,
+      moves: [{ symbol: 'advanceAgent', destinationPath }],
+    });
+
+    expect(response.success).toBe(true);
+
+    const sourceContent = await readFile(sourcePath, 'utf-8');
+    expect(sourceContent).toContain(
+      'import { advanceAgent } from "./tick/advanceAgent";',
+    );
+    expect(sourceContent).not.toContain('function advanceAgent');
+    expect(sourceContent).toContain('return advanceAgent() + 1;');
+    expect(await readFile(destinationPath, 'utf-8')).toContain(
+      'function advanceAgent',
+    );
+  });
+
   it('should move many constants from a barrel without corrupting consumer imports', async () => {
     const sourcePath = join(testDir, 'src', 'feature', 'index.ts');
     const consumerPath = join(testDir, 'src', 'feature', 'consumer.ts');
