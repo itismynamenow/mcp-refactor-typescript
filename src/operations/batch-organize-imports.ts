@@ -13,6 +13,7 @@ export const batchOrganizeImportsSchema = z.object({
     .min(1, 'At least one file path must be provided'),
   preview: z.boolean().optional(),
   stopOnError: z.boolean().optional(),
+  responseMode: z.enum(['summary', 'full']).optional(),
 });
 
 export class BatchOrganizeImportsOperation {
@@ -44,11 +45,38 @@ export class BatchOrganizeImportsOperation {
         }
       }
 
+      const responseMode = validated.responseMode ?? 'summary';
+      const responseFilesChanged =
+        responseMode === 'full'
+          ? filesChanged
+          : filesChanged.map((fileChange) => ({
+              file: fileChange.file,
+              path: fileChange.path,
+              edits: [],
+            }));
+
       return {
         success: results.every((result) => result.success),
         message: `Organized imports for ${successCount}/${validated.filePaths.length} file(s)`,
-        filesChanged,
-        data: { results },
+        filesChanged: responseFilesChanged,
+        data:
+          responseMode === 'full'
+            ? { results }
+            : {
+                responseMode,
+                organized: successCount,
+                requested: validated.filePaths.length,
+                failed: results
+                  .filter((result) => !result.success)
+                  .map((result) => ({
+                    item: result.item,
+                    message: result.message,
+                  })),
+                filesChanged: responseFilesChanged.map((fileChange) => ({
+                  file: fileChange.file,
+                  path: fileChange.path,
+                })),
+              },
       };
     } catch (error) {
       if (error instanceof z.ZodError) return formatValidationError(error);

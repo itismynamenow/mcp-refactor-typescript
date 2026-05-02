@@ -14,6 +14,7 @@ import {
   createBatchMoveSymbolsOperation,
   createBatchOrganizeImportsOperation,
   createBatchRenameSymbolsOperation,
+  createCheckRefactorArtifactsOperation,
   createCleanupCodebaseOperation,
   createExtractConstantOperation,
   createExtractFunctionOperation,
@@ -22,6 +23,7 @@ import {
   createFindSymbolDeclarationsOperation,
   createFixAllOperation,
   createInferReturnTypeOperation,
+  createMinimizeExportsOperation,
   createMoveFileOperation,
   createMoveToFileOperation,
   createOrganizeImportsOperation,
@@ -82,6 +84,10 @@ export class OperationRegistry {
       createBatchOrganizeImportsOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
+      OperationName.CHECK_REFACTOR_ARTIFACTS,
+      createCheckRefactorArtifactsOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
       OperationName.FIX_ALL,
       createFixAllOperation(this.tsServer, this.cwd),
     );
@@ -132,6 +138,10 @@ export class OperationRegistry {
     this.operations.set(
       OperationName.CLEANUP_CODEBASE,
       createCleanupCodebaseOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
+      OperationName.MINIMIZE_EXPORTS,
+      createMinimizeExportsOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.RESTART_TSSERVER,

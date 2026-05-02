@@ -89,10 +89,11 @@ describe('Grouped Tools Integration', () => {
   describe('code_quality Tool', () => {
     const qualityTool = groupedTools[1];
 
-    it('should support organize_imports, batch_organize_imports, fix_all, remove_unused operations', () => {
+    it('should support code quality operations', () => {
       expect(qualityTool.operations).toEqual([
         'organize_imports',
         'batch_organize_imports',
+        'check_refactor_artifacts',
         'fix_all',
         'remove_unused',
       ]);
@@ -169,6 +170,7 @@ describe('Grouped Tools Integration', () => {
         'find_symbol_declarations',
         'refactor_module',
         'cleanup_codebase',
+        'minimize_exports',
         'restart_tsserver',
       ]);
     });

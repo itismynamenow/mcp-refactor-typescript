@@ -4,6 +4,7 @@ import { BatchMoveFilesOperation } from '../batch-move-files.js';
 import { BatchMoveSymbolsOperation } from '../batch-move-symbols.js';
 import { BatchOrganizeImportsOperation } from '../batch-organize-imports.js';
 import { BatchRenameSymbolsOperation } from '../batch-rename-symbols.js';
+import { CheckRefactorArtifactsOperation } from '../check-refactor-artifacts.js';
 import { CleanupCodebaseOperation } from '../cleanup-codebase.js';
 import { ExtractConstantOperation } from '../extract-constant.js';
 import { ExtractFunctionOperation } from '../extract-function.js';
@@ -12,6 +13,7 @@ import { FindReferencesOperation } from '../find-references.js';
 import { FindSymbolDeclarationsOperation } from '../find-symbol-declarations.js';
 import { FixAllOperation } from '../fix-all.js';
 import { InferReturnTypeOperation } from '../infer-return-type.js';
+import { MinimizeExportsOperation } from '../minimize-exports.js';
 import { MoveFileOperation } from '../move-file.js';
 import { MoveToFileOperation } from '../move-to-file.js';
 import { OrganizeImportsOperation } from '../organize-imports.js';
@@ -118,6 +120,13 @@ export function createBatchOrganizeImportsOperation(
   return new BatchOrganizeImportsOperation(
     createOrganizeImportsOperation(tsServer, cwd),
   );
+}
+
+export function createCheckRefactorArtifactsOperation(
+  _tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  return new CheckRefactorArtifactsOperation(new FileOperations(cwd));
 }
 
 export function createFixAllOperation(
@@ -284,6 +293,13 @@ export function createCleanupCodebaseOperation(
     createOrganizeImportsOperation(tsServer, cwd),
     new FileOperations(cwd),
   );
+}
+
+export function createMinimizeExportsOperation(
+  _tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  return new MinimizeExportsOperation(new FileOperations(cwd));
 }
 
 export function createRestartTsServerOperation(

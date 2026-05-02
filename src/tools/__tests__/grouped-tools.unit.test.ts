@@ -472,6 +472,18 @@ describe('Grouped Tools Schema Validation', () => {
       const input = {
         operation: 'batch_organize_imports',
         filePaths: ['/path/to/one.ts', '/path/to/two.ts'],
+        responseMode: 'summary',
+      };
+
+      expect(() => schema.parse(input)).not.toThrow();
+    });
+
+    it('should accept valid check_refactor_artifacts operation', () => {
+      const input = {
+        operation: 'check_refactor_artifacts',
+        filePaths: ['/path/to/one.ts', '/path/to/two.ts'],
+        checks: ['undefined-imports', 'type-type'],
+        facadePaths: ['/path/to/index.ts'],
       };
 
       expect(() => schema.parse(input)).not.toThrow();
@@ -723,6 +735,27 @@ describe('Grouped Tools Schema Validation', () => {
       it('should reject batch_find_references without queries', () => {
         const input = {
           operation: 'batch_find_references',
+        };
+
+        expect(() => schema.parse(input)).toThrow(z.ZodError);
+      });
+    });
+
+    describe('minimize_exports Operation', () => {
+      it('should accept valid minimize_exports operation', () => {
+        const input = {
+          operation: 'minimize_exports',
+          filePaths: ['/path/to/file.ts'],
+          preserveSymbols: ['publicApi'],
+          responseMode: 'summary',
+        };
+
+        expect(() => schema.parse(input)).not.toThrow();
+      });
+
+      it('should reject minimize_exports without filePaths', () => {
+        const input = {
+          operation: 'minimize_exports',
         };
 
         expect(() => schema.parse(input)).toThrow(z.ZodError);

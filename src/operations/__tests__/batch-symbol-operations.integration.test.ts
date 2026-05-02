@@ -14,13 +14,17 @@ import type { BatchFindReferencesOperation } from '../batch-find-references.js';
 import type { BatchMoveSymbolsOperation } from '../batch-move-symbols.js';
 import type { BatchOrganizeImportsOperation } from '../batch-organize-imports.js';
 import type { BatchRenameSymbolsOperation } from '../batch-rename-symbols.js';
+import type { CheckRefactorArtifactsOperation } from '../check-refactor-artifacts.js';
 import type { FindSymbolDeclarationsOperation } from '../find-symbol-declarations.js';
+import type { MinimizeExportsOperation } from '../minimize-exports.js';
 import {
   createBatchFindReferencesOperation,
   createBatchMoveSymbolsOperation,
   createBatchOrganizeImportsOperation,
   createBatchRenameSymbolsOperation,
+  createCheckRefactorArtifactsOperation,
   createFindSymbolDeclarationsOperation,
+  createMinimizeExportsOperation,
 } from '../shared/operation-factory.js';
 import type { SymbolDeclaration } from '../shared/symbol-declarations.js';
 import {
@@ -223,12 +227,147 @@ export const values = [zebra, alpha];
 
     expect(response.success).toBe(true);
     expect(response.message).toBe('Organized imports for 2/2 file(s)');
+    expect(response.filesChanged.every((file) => file.edits.length === 0)).toBe(
+      true,
+    );
+    expect(response.data).toMatchObject({
+      responseMode: 'summary',
+      organized: 2,
+      requested: 2,
+    });
     expect(await readFile(firstPath, 'utf-8')).toContain(
       "import { alpha, zebra } from './deps.js';",
     );
     expect(await readFile(secondPath, 'utf-8')).toContain(
       "import { alpha, zebra } from './deps.js';",
     );
+  });
+
+  it('should return full batch organize edits when requested', async () => {
+    const depsPath = join(testDir, 'src', 'full-deps.ts');
+    const filePath = join(testDir, 'src', 'full-organize.ts');
+    await writeFile(
+      depsPath,
+      `export const alpha = 1;
+export const zebra = 2;
+`,
+      'utf-8',
+    );
+    await writeFile(
+      filePath,
+      `import { zebra, alpha } from './full-deps.js';
+
+console.error(alpha, zebra);
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchOrganizeImportsOperation(
+      testServer!,
+    ) as BatchOrganizeImportsOperation;
+    const response = await operation.execute({
+      filePaths: [filePath],
+      responseMode: 'full',
+    });
+
+    expect(response.success).toBe(true);
+    expect(response.filesChanged[0]?.edits.length).toBeGreaterThan(0);
+    expect(response.data).toHaveProperty('results');
+  });
+
+  it('should report common generated refactor artifacts', async () => {
+    const featureDir = join(testDir, 'src', 'artifacts');
+    const indexPath = join(featureDir, 'index.ts');
+    const childPath = join(featureDir, 'child.ts');
+    const filePath = join(featureDir, 'consumer.ts');
+    await mkdir(featureDir, { recursive: true });
+    await writeFile(indexPath, 'export const facade = 1;', 'utf-8');
+    await writeFile(childPath, 'export class RuntimeThing {}', 'utf-8');
+    await writeFile(
+      filePath,
+      `import { undefined, type type Alias } from './index.js';
+import { type RuntimeThing } from './child.js';
+import { facade } from './consumer.js';
+
+new RuntimeThing();
+`,
+      'utf-8',
+    );
+
+    const operation = createCheckRefactorArtifactsOperation(
+      testServer!,
+    ) as CheckRefactorArtifactsOperation;
+    const response = await operation.execute({
+      filePaths: [filePath],
+      facadePaths: [indexPath],
+    });
+
+    expect(response.success).toBe(false);
+    const findings = (
+      response.data as {
+        findings: Array<{ check: string }>;
+      }
+    ).findings;
+    expect(findings.map((finding) => finding.check)).toEqual(
+      expect.arrayContaining([
+        'undefined-imports',
+        'type-type',
+        'type-only-runtime-imports',
+        'self-imports',
+        'deep-facade-imports',
+      ]),
+    );
+  });
+
+  it('should remove only unreferenced export modifiers by default with compact output', async () => {
+    const libPath = join(testDir, 'src', 'minimize-lib.ts');
+    const consumerPath = join(testDir, 'src', 'minimize-consumer.ts');
+    await writeFile(
+      libPath,
+      `export function internalOnly() {
+  return 1;
+}
+
+export function usedElsewhere() {
+  return internalOnly();
+}
+
+export const localValue = 2;
+export const importedValue = 3;
+`,
+      'utf-8',
+    );
+    await writeFile(
+      consumerPath,
+      `import { importedValue, usedElsewhere } from './minimize-lib.js';
+
+console.error(importedValue, usedElsewhere());
+`,
+      'utf-8',
+    );
+
+    const operation = createMinimizeExportsOperation(
+      testServer!,
+    ) as MinimizeExportsOperation;
+    const response = await operation.execute({
+      filePaths: [libPath],
+    });
+
+    expect(response.success).toBe(true);
+    expect(response.filesChanged[0]?.edits).toEqual([]);
+    expect(response.data).toMatchObject({
+      responseMode: 'summary',
+      removedExports: [
+        expect.objectContaining({ symbol: 'internalOnly' }),
+        expect.objectContaining({ symbol: 'localValue' }),
+      ],
+    });
+
+    const content = await readFile(libPath, 'utf-8');
+    expect(content).toContain('function internalOnly()');
+    expect(content).toContain('const localValue = 2;');
+    expect(content).toContain('export function usedElsewhere()');
+    expect(content).toContain('export const importedValue = 3;');
   });
 
   it('should move multiple symbols while finding each declaration after earlier moves', async () => {

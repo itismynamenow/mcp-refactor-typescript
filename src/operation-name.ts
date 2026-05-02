@@ -11,6 +11,7 @@ export enum OperationName {
   BATCH_MOVE_SYMBOLS = 'batch_move_symbols',
   ORGANIZE_IMPORTS = 'organize_imports',
   BATCH_ORGANIZE_IMPORTS = 'batch_organize_imports',
+  CHECK_REFACTOR_ARTIFACTS = 'check_refactor_artifacts',
   FIX_ALL = 'fix_all',
   REMOVE_UNUSED = 'remove_unused',
   FIND_REFERENCES = 'find_references',
@@ -24,5 +25,6 @@ export enum OperationName {
   INFER_RETURN_TYPE = 'infer_return_type',
   REFACTOR_MODULE = 'refactor_module',
   CLEANUP_CODEBASE = 'cleanup_codebase',
+  MINIMIZE_EXPORTS = 'minimize_exports',
   RESTART_TSSERVER = 'restart_tsserver',
 }

@@ -174,6 +174,7 @@ Use when: After refactoring or before commits. Use proactively.`,
   operations: [
     OperationName.ORGANIZE_IMPORTS,
     OperationName.BATCH_ORGANIZE_IMPORTS,
+    OperationName.CHECK_REFACTOR_ARTIFACTS,
     OperationName.FIX_ALL,
     OperationName.REMOVE_UNUSED,
   ],
@@ -182,18 +183,35 @@ Use when: After refactoring or before commits. Use proactively.`,
       operation: z.enum([
         OperationName.ORGANIZE_IMPORTS,
         OperationName.BATCH_ORGANIZE_IMPORTS,
+        OperationName.CHECK_REFACTOR_ARTIFACTS,
         OperationName.FIX_ALL,
         OperationName.REMOVE_UNUSED,
       ]),
       filePath: z.string().min(1, 'File path cannot be empty').optional(),
       filePaths: z.array(z.string().min(1)).optional(),
+      checks: z
+        .array(
+          z.enum([
+            'undefined-imports',
+            'type-type',
+            'self-imports',
+            'type-only-runtime-imports',
+            'deep-facade-imports',
+          ]),
+        )
+        .optional(),
+      facadePaths: z.array(z.string().min(1)).optional(),
       stopOnError: z.boolean().optional(),
+      responseMode: z.enum(['summary', 'full']).optional(),
       preview: z.boolean().optional(),
       projectName: projectNameSchema,
     })
     .refine(
       (data) => {
-        if (data.operation === OperationName.BATCH_ORGANIZE_IMPORTS) {
+        if (
+          data.operation === OperationName.BATCH_ORGANIZE_IMPORTS ||
+          data.operation === OperationName.CHECK_REFACTOR_ARTIFACTS
+        ) {
           return !!data.filePaths && data.filePaths.length > 0;
         }
         return !!data.filePath;
@@ -368,6 +386,7 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
     OperationName.FIND_SYMBOL_DECLARATIONS,
     OperationName.REFACTOR_MODULE,
     OperationName.CLEANUP_CODEBASE,
+    OperationName.MINIMIZE_EXPORTS,
     OperationName.RESTART_TSSERVER,
   ],
   inputSchema: z
@@ -378,9 +397,11 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
         OperationName.FIND_SYMBOL_DECLARATIONS,
         OperationName.REFACTOR_MODULE,
         OperationName.CLEANUP_CODEBASE,
+        OperationName.MINIMIZE_EXPORTS,
         OperationName.RESTART_TSSERVER,
       ]),
       filePath: z.string().min(1).optional(),
+      filePaths: z.array(z.string().min(1)).optional(),
       line: z.number().int().positive().optional(),
       text: z.string().min(1).optional(),
       symbols: z.array(z.string().min(1)).optional(),
@@ -398,6 +419,9 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
       directory: z.string().min(1).optional(),
       deleteUnusedFiles: z.boolean().optional(),
       entrypoints: z.array(z.string()).optional(),
+      preserveSymbols: z.array(z.string().min(1)).optional(),
+      preservePublicEntrypoints: z.array(z.string().min(1)).optional(),
+      responseMode: z.enum(['summary', 'full']).optional(),
       preview: z.boolean().optional(),
       projectName: projectNameSchema,
     })
@@ -418,6 +442,9 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
         if (data.operation === OperationName.CLEANUP_CODEBASE) {
           if (!data.directory) return false;
           if (data.deleteUnusedFiles && !data.entrypoints) return false;
+        }
+        if (data.operation === OperationName.MINIMIZE_EXPORTS) {
+          return !!data.filePaths && data.filePaths.length > 0;
         }
         return true;
       },
@@ -455,6 +482,11 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
             return {
               message: `entrypoints is required when deleteUnusedFiles: true to prevent accidental deletion. Specify your app's entry points like ["src/main\\\\.ts$"] or use defaults at your own risk.`,
             };
+        }
+        if (data.operation === OperationName.MINIMIZE_EXPORTS) {
+          return {
+            message: `filePaths is required for ${OperationName.MINIMIZE_EXPORTS}`,
+          };
         }
         return { message: 'Invalid workspace operation parameters' };
       },

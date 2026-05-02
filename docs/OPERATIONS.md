@@ -80,10 +80,35 @@ import { a, b, c } from '../utils';  // Sorted, unused removed
 Input: {
   operation: "batch_organize_imports",
   filePaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
-  stopOnError: false
+  stopOnError: false,
+  responseMode: "summary"
 }
 
-Result: Organizes imports in each file and reports per-file success/failure
+Result: Organizes imports in each file and reports compact per-file success/failure.
+Use `responseMode: "full"` only when you need full edit payloads.
+```
+
+### check_refactor_artifacts
+**What**: Scan changed files for common generated refactor artifacts
+**Time**: < 100ms for small changed-file sets
+**Use when**: After move/extract/batch operations before typecheck
+
+**Checks**:
+- `undefined-imports`: generated `import { undefined }`
+- `type-type`: duplicated `type type`
+- `self-imports`: imports that target the same file
+- `type-only-runtime-imports`: type-only imports used as runtime values
+- `deep-facade-imports`: imports under a configured facade path
+
+**Example**:
+```typescript
+Input: {
+  operation: "check_refactor_artifacts",
+  filePaths: ["src/domain/feature/a.ts", "src/domain/feature/index.ts"],
+  facadePaths: ["src/domain/feature/index.ts"]
+}
+
+Result: Returns findings with check name, file, line, and import text
 ```
 
 ### fix_all
@@ -392,6 +417,24 @@ Result:
 - Removes unused exports (via tsr)
 - Deletes files with no used exports
 - Organizes imports in remaining files
+```
+
+### minimize_exports
+**What**: Remove `export` modifiers from selected files when symbols are not imported or re-exported elsewhere
+**Time**: Scans project files once, then edits requested files
+**Use when**: After moving symbols out of a large source file, to shrink the source file's public surface
+**Default response**: Compact summary with no full edit payloads
+
+**Example**:
+```typescript
+Input: {
+  operation: "minimize_exports",
+  filePaths: ["src/domain/local-region/simulation/wildlife.ts"],
+  preserveSymbols: ["advanceWildlifeForLocalRegionTick"],
+  responseMode: "summary"
+}
+
+Result: Removes unnecessary export keywords from unreferenced symbols and reports removed symbols
 ```
 
 ### restart_tsserver
