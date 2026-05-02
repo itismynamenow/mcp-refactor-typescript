@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { FileOperations } from '../file-operations.js';
 
 describe('FileOperations', () => {
@@ -113,13 +113,13 @@ describe('FileOperations', () => {
 
       // Assert
       expect(absolutePath).toContain(process.cwd());
-      expect(absolutePath).toContain('src/test.ts');
-      expect(absolutePath).toMatch(/^\//);
+      expect(absolutePath).toContain(join('src', 'test.ts'));
+      expect(isAbsolute(absolutePath)).toBe(true);
     });
 
     it('should return absolute path unchanged', () => {
       // Arrange
-      const absolutePath = '/Users/test/project/src/file.ts';
+      const absolutePath = join(process.cwd(), 'src', 'file.ts');
 
       // Act
       const result = operations.resolvePath(absolutePath);
@@ -138,7 +138,7 @@ describe('FileOperations', () => {
       // Assert
       expect(resolved).not.toContain('..');
       expect(resolved).not.toContain('./');
-      expect(resolved).toContain('lib/file.ts');
+      expect(resolved).toContain(join('lib', 'file.ts'));
     });
   });
 });

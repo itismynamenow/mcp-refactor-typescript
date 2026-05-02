@@ -152,7 +152,7 @@ Tips:
         },
       );
 
-      if (!edits || !edits.edits || edits.edits.length === 0) {
+      if (!edits?.edits || edits.edits.length === 0) {
         return {
           success: false,
           message: `No edits generated for move operation

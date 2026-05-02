@@ -50,7 +50,6 @@ console.error(x);
     const response = await operation!.execute({ filePath });
 
     // Assert
-    console.log('Response:', JSON.stringify(response, null, 2));
     expect(response.success).toBe(true);
     expect(response.message).toContain('Removed');
 

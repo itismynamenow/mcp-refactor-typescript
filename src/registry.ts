@@ -32,80 +32,90 @@ export interface Operation {
   execute(input: Record<string, unknown>): Promise<RefactorResult>;
 }
 
+export type OperationRegistryOptions = {
+  cwd?: string;
+};
+
 export class OperationRegistry {
   private operations = new Map<OperationName, Operation>();
   private tsServer: TypeScriptServer;
+  private cwd: string;
 
-  constructor() {
+  constructor(options: OperationRegistryOptions = {}) {
     this.tsServer = new TypeScriptServer();
+    this.cwd = options.cwd ?? process.cwd();
     this.registerOperations();
   }
 
   registerOperations(): void {
     this.operations.set(
       OperationName.RENAME,
-      createRenameOperation(this.tsServer),
+      createRenameOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.RENAME_FILE,
-      createRenameFileOperation(this.tsServer),
+      createRenameFileOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.MOVE_FILE,
-      createMoveFileOperation(this.tsServer),
+      createMoveFileOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.BATCH_MOVE_FILES,
-      createBatchMoveFilesOperation(this.tsServer),
+      createBatchMoveFilesOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.ORGANIZE_IMPORTS,
-      createOrganizeImportsOperation(this.tsServer),
+      createOrganizeImportsOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.FIX_ALL,
-      createFixAllOperation(this.tsServer),
+      createFixAllOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.REMOVE_UNUSED,
-      createRemoveUnusedOperation(this.tsServer),
+      createRemoveUnusedOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.FIND_REFERENCES,
-      createFindReferencesOperation(this.tsServer),
+      createFindReferencesOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.EXTRACT_FUNCTION,
-      createExtractFunctionOperation(this.tsServer),
+      createExtractFunctionOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.EXTRACT_CONSTANT,
-      createExtractConstantOperation(this.tsServer),
+      createExtractConstantOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.EXTRACT_VARIABLE,
-      createExtractVariableOperation(this.tsServer),
+      createExtractVariableOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.MOVE_TO_FILE,
-      createMoveToFileOperation(this.tsServer),
+      createMoveToFileOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.INFER_RETURN_TYPE,
-      createInferReturnTypeOperation(this.tsServer),
+      createInferReturnTypeOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.REFACTOR_MODULE,
-      createRefactorModuleOperation(this.tsServer),
+      createRefactorModuleOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.CLEANUP_CODEBASE,
-      createCleanupCodebaseOperation(this.tsServer),
+      createCleanupCodebaseOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.RESTART_TSSERVER,
-      createRestartTsServerOperation(this.tsServer),
+      createRestartTsServerOperation(this.tsServer, this.cwd),
     );
+  }
+
+  getCwd(): string {
+    return this.cwd;
   }
 
   getOperation(name: OperationName): Operation | undefined {
@@ -127,7 +137,7 @@ export class OperationRegistry {
     if (hasTypeScriptFiles) {
       logger.info('TypeScript/JavaScript files detected, starting tsserver...');
       try {
-        await this.tsServer.start(process.cwd());
+        await this.tsServer.start(this.cwd);
       } catch (error) {
         logger.error({ err: error }, 'Failed to start tsserver');
       }
@@ -177,6 +187,6 @@ export class OperationRegistry {
       return false;
     }
 
-    return checkDir(process.cwd());
+    return checkDir(this.cwd);
   }
 }

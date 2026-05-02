@@ -2,6 +2,7 @@
  * Remove unused code operation handler
  */
 
+import { normalize } from 'node:path';
 import { z } from 'zod';
 import type {
   RefactorResult,
@@ -123,7 +124,7 @@ export class RemoveUnusedOperation {
 
       const allTextChanges: TSTextChange[] = [];
       for (const fileEdit of allChanges) {
-        if (fileEdit.fileName === filePath) {
+        if (normalize(fileEdit.fileName) === normalize(filePath)) {
           allTextChanges.push(...fileEdit.textChanges);
         }
       }

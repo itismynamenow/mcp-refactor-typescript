@@ -10,7 +10,10 @@ export const restartTsServerSchema = z.object({});
 export type RestartTsServerInput = z.infer<typeof restartTsServerSchema>;
 
 export class RestartTsServerOperation {
-  constructor(private tsServer: TypeScriptServer) {}
+  constructor(
+    private tsServer: TypeScriptServer,
+    private cwd: string = process.cwd(),
+  ) {}
 
   async execute(_input: Record<string, unknown>): Promise<RefactorResult> {
     try {
@@ -20,7 +23,7 @@ export class RestartTsServerOperation {
         await this.tsServer.stop();
       }
 
-      await this.tsServer.start(process.cwd());
+      await this.tsServer.start(this.cwd);
 
       return {
         success: true,

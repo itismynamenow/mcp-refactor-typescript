@@ -2,13 +2,13 @@
  * Refactor module operation - combines move_file + organize_imports + fix_all
  */
 
-import { resolve } from 'node:path';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import { formatValidationError } from '../utils/validation-error.js';
 import type { FixAllOperation } from './fix-all.js';
 import type { MoveFileOperation } from './move-file.js';
 import type { OrganizeImportsOperation } from './organize-imports.js';
+import type { FileOperations } from './shared/file-operations.js';
 import type { TSServerGuard } from './shared/tsserver-guard.js';
 
 const refactorModuleSchema = z.object({
@@ -23,13 +23,16 @@ export class RefactorModuleOperation {
     private moveFileOp: MoveFileOperation,
     private organizeImportsOp: OrganizeImportsOperation,
     private fixAllOp: FixAllOperation,
+    private fileOps: FileOperations,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
     try {
       const validated = refactorModuleSchema.parse(input);
-      const sourcePath = resolve(validated.sourcePath);
-      const destinationPath = resolve(validated.destinationPath);
+      const sourcePath = this.fileOps.resolvePath(validated.sourcePath);
+      const destinationPath = this.fileOps.resolvePath(
+        validated.destinationPath,
+      );
 
       const guardResult = await this.tsServerGuard.ensureReady();
       if (guardResult) return guardResult;

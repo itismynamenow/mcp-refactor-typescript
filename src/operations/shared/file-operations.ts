@@ -2,6 +2,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 export class FileOperations {
+  constructor(private cwd: string = process.cwd()) {}
+
   async readLines(filePath: string): Promise<string[]> {
     const content = await readFile(filePath, 'utf8');
     return content.split('\n');
@@ -13,6 +15,6 @@ export class FileOperations {
   }
 
   resolvePath(filePath: string): string {
-    return resolve(filePath);
+    return resolve(this.cwd, filePath);
   }
 }

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { OperationRegistry } from './registry.js';
+import { OperationRegistryCache } from './projects/operation-registry-cache.js';
 import { operationsCatalog } from './resources/operations-catalog.js';
 import { groupedTools } from './tools/grouped-tools.js';
 import { flushLogs, logger } from './utils/logger.js';
@@ -27,7 +27,7 @@ const server = new McpServer({
   version: packageJson.version,
 });
 
-const registry = new OperationRegistry();
+const registryCache = new OperationRegistryCache();
 
 // Register operations catalog as MCP resource
 server.registerResource(
@@ -67,6 +67,9 @@ for (const tool of groupedTools) {
     },
     async (args: Record<string, unknown>) => {
       try {
+        const registry = await registryCache.get(
+          typeof args.projectName === 'string' ? args.projectName : undefined,
+        );
         const result = await tool.execute(args, registry);
 
         const response = {
@@ -130,7 +133,7 @@ for (const tool of groupedTools) {
 }
 
 async function main() {
-  await registry.initialize();
+  await registryCache.get();
 
   const transport = new StdioServerTransport();
 
@@ -154,7 +157,7 @@ async function main() {
 
     try {
       await server.close();
-      await registry.close();
+      await registryCache.close();
 
       clearTimeout(timeoutId);
       logger.info('Cleanup completed successfully');

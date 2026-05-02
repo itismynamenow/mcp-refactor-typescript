@@ -139,7 +139,7 @@ Try:
         },
       );
 
-      if (!edits || !edits.edits || edits.edits.length === 0) {
+      if (!edits?.edits || edits.edits.length === 0) {
         return {
           success: false,
           message: `No edits generated for infer return type at ${filePath}:${line}:${column}

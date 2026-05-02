@@ -8,7 +8,7 @@ import {
   it,
 } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 import { TypeScriptServer } from '../../language-servers/typescript/tsserver-client.js';
 import type { RenameOperation } from '../rename.js';
 import { createRenameOperation } from '../shared/operation-factory.js';
@@ -80,9 +80,13 @@ const result = processData('hello');`,
       // Assert
       expect(projectInfo?.fileNames).toBeDefined();
 
-      const projectFiles = projectInfo!.fileNames!.filter(
-        (f) => !f.includes('node_modules') && !f.match(/\/lib\.[^/]+\.d\.ts$/),
-      );
+      const projectFiles = projectInfo!
+        .fileNames!.filter(
+          (f) =>
+            !f.includes('node_modules') &&
+            !f.match(/[/\\]lib\.[^/\\]+\.d\.ts$/),
+        )
+        .map((file) => normalize(file));
 
       expect(projectFiles).toContain(libPath);
       expect(projectFiles).toContain(mainPath);

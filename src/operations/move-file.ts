@@ -2,11 +2,11 @@
  * Move file operation handler
  */
 
-import { resolve } from 'node:path';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import type { FileDiscovery } from './shared/file-discovery.js';
 import type { FileMover } from './shared/file-mover.js';
+import type { FileOperations } from './shared/file-operations.js';
 import type { TSServerGuard } from './shared/tsserver-guard.js';
 
 export const moveFileSchema = z.object({
@@ -20,13 +20,16 @@ export class MoveFileOperation {
     private guard: TSServerGuard,
     private discovery: FileDiscovery,
     private helper: FileMover,
+    private fileOps: FileOperations,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
     try {
       const validated = moveFileSchema.parse(input);
-      const sourcePath = resolve(validated.sourcePath);
-      const destinationPath = resolve(validated.destinationPath);
+      const sourcePath = this.fileOps.resolvePath(validated.sourcePath);
+      const destinationPath = this.fileOps.resolvePath(
+        validated.destinationPath,
+      );
 
       const guardResult = await this.guard.ensureReady();
       if (guardResult) return guardResult;

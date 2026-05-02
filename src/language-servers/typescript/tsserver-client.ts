@@ -4,10 +4,14 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { logger } from '../../utils/logger.js';
 import { MessageParser } from './message-parser.js';
+
+const require = createRequire(import.meta.url);
 
 export interface RefactorResult {
   success: boolean;
@@ -70,7 +74,15 @@ export class TypeScriptServer {
       throw new Error('TypeScript server is already running');
     }
 
-    const tsserverPath = resolve('node_modules/typescript/lib/tsserver.js');
+    this.projectLoaded = false;
+
+    const projectTsserverPath = resolve(
+      projectPath,
+      'node_modules/typescript/lib/tsserver.js',
+    );
+    const tsserverPath = existsSync(projectTsserverPath)
+      ? projectTsserverPath
+      : require.resolve('typescript/lib/tsserver.js');
 
     this.process = spawn('node', [tsserverPath], {
       stdio: ['pipe', 'pipe', 'pipe'],

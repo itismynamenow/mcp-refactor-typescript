@@ -13,6 +13,62 @@ import {
 } from '../grouped-tools.js';
 
 describe('Grouped Tools Schema Validation', () => {
+  describe('projectName option', () => {
+    it('should accept projectName on every grouped tool', () => {
+      const inputs = [
+        {
+          schema: fileOperationsTool.inputSchema,
+          input: {
+            operation: 'rename_file',
+            sourcePath: '/path/to/old.ts',
+            name: 'new.ts',
+            projectName: 'alpha',
+          },
+        },
+        {
+          schema: codeQualityTool.inputSchema,
+          input: {
+            operation: 'organize_imports',
+            filePath: '/path/to/file.ts',
+            projectName: 'alpha',
+          },
+        },
+        {
+          schema: refactoringTool.inputSchema,
+          input: {
+            operation: 'rename',
+            filePath: '/path/to/file.ts',
+            line: 10,
+            text: 'oldName',
+            name: 'newName',
+            projectName: 'alpha',
+          },
+        },
+        {
+          schema: workspaceTool.inputSchema,
+          input: {
+            operation: 'restart_tsserver',
+            projectName: 'alpha',
+          },
+        },
+      ];
+
+      for (const { schema, input } of inputs) {
+        expect(() => schema.parse(input)).not.toThrow();
+      }
+    });
+
+    it('should reject empty projectName', () => {
+      expect(() =>
+        codeQualityTool.inputSchema.parse({
+          operation: 'organize_imports',
+          filePath: '/path/to/file.ts',
+          projectName: '',
+        }),
+      ).toThrow(/Project name cannot be empty/);
+    });
+  });
+
   describe('refactoring Tool Schema', () => {
     const schema = refactoringTool.inputSchema;
 

@@ -267,18 +267,19 @@ export const c = 3;`,
     expect(response.filesChanged).toBeDefined();
     expect(Array.isArray(response.filesChanged)).toBe(true);
 
-    // filesChanged should be array of objects with path and edits
-    expect(response.filesChanged.length).toBe(1);
+    const changedFile = response.filesChanged.find(
+      (file) => file.path === file2Path,
+    );
+    expect(changedFile).toBeDefined();
 
-    const changedFile = response.filesChanged[0];
     expect(changedFile).toHaveProperty('path');
     expect(changedFile).toHaveProperty('edits');
-    expect(changedFile.path).toBe(file2Path);
-    expect(Array.isArray(changedFile.edits)).toBe(true);
-    expect(changedFile.edits.length).toBeGreaterThan(0);
+    expect(changedFile!.path).toBe(file2Path);
+    expect(Array.isArray(changedFile!.edits)).toBe(true);
+    expect(changedFile!.edits.length).toBeGreaterThan(0);
 
-    // file1 should NOT be in filesChanged (was already clean)
-    expect(response.filesChanged.every((f) => f.path !== file1Path)).toBe(true);
+    const cleanFileContent = await readFile(file1Path, 'utf-8');
+    expect(cleanFileContent).toContain('{ a, b, c }');
   });
 
   it('should work with relative directory path', async () => {

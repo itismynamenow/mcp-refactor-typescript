@@ -1,3 +1,4 @@
+import { basename, normalize } from 'node:path';
 import type { TSTextChange } from '../../language-servers/typescript/tsserver-types.js';
 
 interface FileEdit {
@@ -57,6 +58,7 @@ export class EditApplicator {
     filePath: string,
   ): FileChanges {
     const edits: FileEdit[] = [];
+    const normalizedPath = normalize(filePath);
 
     for (const change of changes) {
       const startLine = change.start.line - 1;
@@ -84,8 +86,8 @@ export class EditApplicator {
     }
 
     return {
-      file: filePath.split('/').pop() || filePath,
-      path: filePath,
+      file: basename(normalizedPath),
+      path: normalizedPath,
       edits,
     };
   }

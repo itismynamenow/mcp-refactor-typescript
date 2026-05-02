@@ -3,6 +3,7 @@
  * Single Responsibility: Handle text changes and find generated declarations
  */
 
+import { normalize } from 'node:path';
 import type { TSTextChange } from '../language-servers/typescript/tsserver-types.js';
 
 type DeclarationType = 'const' | 'function';
@@ -73,8 +74,9 @@ export class RefactoringProcessor {
     newName: string,
     filePath: string,
   ): void {
+    const normalizedFilePath = normalize(filePath);
     for (const fileChange of filesChanged) {
-      if (fileChange.path === filePath) {
+      if (normalize(fileChange.path) === normalizedFilePath) {
         for (const edit of fileChange.edits) {
           if (edit.new.includes(oldName)) {
             edit.new = edit.new.replace(

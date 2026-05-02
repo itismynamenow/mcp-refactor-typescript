@@ -2,11 +2,12 @@
  * Rename file operation handler (in-place rename)
  */
 
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import type { FileDiscovery } from './shared/file-discovery.js';
 import type { FileMover } from './shared/file-mover.js';
+import type { FileOperations } from './shared/file-operations.js';
 import type { TSServerGuard } from './shared/tsserver-guard.js';
 
 const renameFileSchema = z.object({
@@ -20,12 +21,13 @@ export class RenameFileOperation {
     private guard: TSServerGuard,
     private discovery: FileDiscovery,
     private helper: FileMover,
+    private fileOps: FileOperations,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
     try {
       const validated = renameFileSchema.parse(input);
-      const sourcePath = resolve(validated.sourcePath);
+      const sourcePath = this.fileOps.resolvePath(validated.sourcePath);
       const directory = dirname(sourcePath);
       const destinationPath = join(directory, validated.name);
 

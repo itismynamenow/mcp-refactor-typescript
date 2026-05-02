@@ -25,152 +25,208 @@ import { IndentationDetector } from './indentation-detector.js';
 import { TextPositionConverter } from './text-position-converter.js';
 import { TSServerGuard } from './tsserver-guard.js';
 
-export function createRenameFileOperation(tsServer: TypeScriptServer) {
+export function createRenameFileOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
   return new RenameFileOperation(
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
-    new FileMover(tsServer),
+    new FileMover(tsServer, fileOps),
+    fileOps,
   );
 }
 
-export function createMoveFileOperation(tsServer: TypeScriptServer) {
+export function createMoveFileOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
   return new MoveFileOperation(
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
-    new FileMover(tsServer),
+    new FileMover(tsServer, fileOps),
+    fileOps,
   );
 }
 
-export function createBatchMoveFilesOperation(tsServer: TypeScriptServer) {
+export function createBatchMoveFilesOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
   return new BatchMoveFilesOperation(
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
-    new FileMover(tsServer),
+    new FileMover(tsServer, fileOps),
+    fileOps,
   );
 }
 
-export function createRenameOperation(tsServer: TypeScriptServer) {
+export function createRenameOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new RenameOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
   );
 }
 
-export function createOrganizeImportsOperation(tsServer: TypeScriptServer) {
+export function createOrganizeImportsOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new OrganizeImportsOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createFixAllOperation(tsServer: TypeScriptServer) {
+export function createFixAllOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new FixAllOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new EditApplicator(),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createRemoveUnusedOperation(tsServer: TypeScriptServer) {
+export function createRemoveUnusedOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new RemoveUnusedOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new EditApplicator(),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createFindReferencesOperation(tsServer: TypeScriptServer) {
+export function createFindReferencesOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new FindReferencesOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
   );
 }
 
-export function createExtractFunctionOperation(tsServer: TypeScriptServer) {
+export function createExtractFunctionOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new ExtractFunctionOperation(
     tsServer,
     new RefactoringProcessor('function'),
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createExtractConstantOperation(tsServer: TypeScriptServer) {
+export function createExtractConstantOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new ExtractConstantOperation(
     tsServer,
     new RefactoringProcessor('const'),
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createExtractVariableOperation(tsServer: TypeScriptServer) {
+export function createExtractVariableOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new ExtractVariableOperation(
     tsServer,
     new RefactoringProcessor('const'),
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createMoveToFileOperation(tsServer: TypeScriptServer) {
+export function createMoveToFileOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new MoveToFileOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createInferReturnTypeOperation(tsServer: TypeScriptServer) {
+export function createInferReturnTypeOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new InferReturnTypeOperation(
     tsServer,
-    new FileOperations(),
+    new FileOperations(cwd),
     new TextPositionConverter(),
     new EditApplicator(),
-    new TSServerGuard(tsServer),
+    new TSServerGuard(tsServer, cwd),
   );
 }
 
-export function createRefactorModuleOperation(tsServer: TypeScriptServer) {
+export function createRefactorModuleOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new RefactorModuleOperation(
-    new TSServerGuard(tsServer),
-    createMoveFileOperation(tsServer),
-    createOrganizeImportsOperation(tsServer),
-    createFixAllOperation(tsServer),
+    new TSServerGuard(tsServer, cwd),
+    createMoveFileOperation(tsServer, cwd),
+    createOrganizeImportsOperation(tsServer, cwd),
+    createFixAllOperation(tsServer, cwd),
+    new FileOperations(cwd),
   );
 }
 
-export function createCleanupCodebaseOperation(tsServer: TypeScriptServer) {
+export function createCleanupCodebaseOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
   return new CleanupCodebaseOperation(
-    new TSServerGuard(tsServer),
-    createOrganizeImportsOperation(tsServer),
+    new TSServerGuard(tsServer, cwd),
+    createOrganizeImportsOperation(tsServer, cwd),
+    new FileOperations(cwd),
   );
 }
 
-export function createRestartTsServerOperation(tsServer: TypeScriptServer) {
-  return new RestartTsServerOperation(tsServer);
+export function createRestartTsServerOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  return new RestartTsServerOperation(tsServer, cwd);
 }

@@ -27,6 +27,11 @@ interface GroupedTool {
   ) => Promise<RefactorResult>;
 }
 
+const projectNameSchema = z
+  .string()
+  .min(1, 'Project name cannot be empty')
+  .optional();
+
 // File Operations Tool
 export const fileOperationsTool: GroupedTool = {
   name: 'file_operations',
@@ -58,6 +63,7 @@ Use when: Renaming/moving TS/JS files. Always use this, not mv/Edit.`,
       files: z.array(z.string().min(1)).optional(),
       targetFolder: z.string().min(1).optional(),
       preview: z.boolean().optional(),
+      projectName: projectNameSchema,
     })
     .refine(
       (data) => {
@@ -165,6 +171,7 @@ Use when: After refactoring or before commits. Use proactively.`,
     ]),
     filePath: z.string().min(1, 'File path cannot be empty'),
     preview: z.boolean().optional(),
+    projectName: projectNameSchema,
   }),
   async execute(args, registry) {
     const telemetry = new Telemetry();
@@ -233,6 +240,7 @@ Use when: Renaming, extracting, or moving symbols between files. Always use this
       name: z.string().optional(),
       destinationPath: z.string().min(1).optional(),
       preview: z.boolean().optional(),
+      projectName: projectNameSchema,
     })
     .refine(
       (data) => {
@@ -309,6 +317,7 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
       deleteUnusedFiles: z.boolean().optional(),
       entrypoints: z.array(z.string()).optional(),
       preview: z.boolean().optional(),
+      projectName: projectNameSchema,
     })
     .refine(
       (data) => {

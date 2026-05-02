@@ -3,12 +3,13 @@
  */
 
 import { mkdir } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import { formatValidationError } from '../utils/validation-error.js';
 import type { FileDiscovery } from './shared/file-discovery.js';
 import type { FileMover } from './shared/file-mover.js';
+import type { FileOperations } from './shared/file-operations.js';
 import type { TSServerGuard } from './shared/tsserver-guard.js';
 
 export const batchMoveFilesSchema = z.object({
@@ -24,13 +25,14 @@ export class BatchMoveFilesOperation {
     private guard: TSServerGuard,
     private discovery: FileDiscovery,
     private helper: FileMover,
+    private fileOps: FileOperations,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
     try {
       const validated = batchMoveFilesSchema.parse(input);
-      const files = validated.files.map((f) => resolve(f));
-      const targetFolder = resolve(validated.targetFolder);
+      const files = validated.files.map((f) => this.fileOps.resolvePath(f));
+      const targetFolder = this.fileOps.resolvePath(validated.targetFolder);
 
       const guardResult = await this.guard.ensureReady();
       if (guardResult) return guardResult;

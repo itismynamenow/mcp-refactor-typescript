@@ -4,11 +4,14 @@ import type {
 } from '../../language-servers/typescript/tsserver-client.js';
 
 export class TSServerGuard {
-  constructor(private tsServer: TypeScriptServer) {}
+  constructor(
+    private tsServer: TypeScriptServer,
+    private cwd: string = process.cwd(),
+  ) {}
 
   async ensureReady(timeout = 5000): Promise<RefactorResult | null> {
     if (!this.tsServer.isRunning()) {
-      await this.tsServer.start(process.cwd());
+      await this.tsServer.start(this.cwd);
     }
 
     return await this.checkProjectLoaded(timeout);

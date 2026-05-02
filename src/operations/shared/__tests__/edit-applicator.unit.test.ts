@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { normalize } from 'node:path';
 import type { TSTextChange } from '../../../language-servers/typescript/tsserver-types.js';
 import { EditApplicator } from '../edit-applicator.js';
 
@@ -251,7 +252,7 @@ describe('EditApplicator', () => {
 
       // Assert
       expect(result.file).toBe('file.ts');
-      expect(result.path).toBe(filePath);
+      expect(result.path).toBe(normalize(filePath));
       expect(result.edits).toHaveLength(1);
       expect(result.edits[0]).toEqual({
         line: 1,

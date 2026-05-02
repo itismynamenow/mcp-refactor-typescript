@@ -88,6 +88,31 @@ npx @modelcontextprotocol/inspector mcp-refactor-typescript
 
 Open http://localhost:5173 to explore available tools and test refactoring operations.
 
+## Multi-Project Workspaces
+
+Every tool accepts an optional `projectName` argument. When omitted, the server uses its normal startup working directory. When provided, the server reads a JSON project map and runs the operation in the configured project directory.
+
+By default the config file is loaded from `~/.codex/mcp-projects.json`. Set `MCP_PROJECTS_CONFIG` to use a different path.
+
+```json
+{
+  "projects": {
+    "app": "C:\\Files\\Code\\TS\\my-app",
+    "tools": "C:\\Files\\Code\\TS\\mcp-refactor-typescript"
+  }
+}
+```
+
+Example:
+
+```json
+{
+  "operation": "organize_imports",
+  "filePath": "src/index.ts",
+  "projectName": "tools"
+}
+```
+
 ## Available Tools (v2.0)
 
 The server exposes **4 grouped tools** with **15 operations** total. Each tool has a specific domain and uses the `operation` parameter to specify the action.

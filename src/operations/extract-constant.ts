@@ -1,3 +1,4 @@
+import { normalize } from 'node:path';
 import { z } from 'zod';
 import type {
   RefactorResult,
@@ -157,7 +158,7 @@ Try:
         },
       );
 
-      if (!edits || !edits.edits || edits.edits.length === 0) {
+      if (!edits?.edits || edits.edits.length === 0) {
         return {
           success: false,
           message: `No edits generated for extract constant at ${filePath}:${startLine}:${startColumn}
@@ -198,7 +199,10 @@ Try:
 
         filesChanged.push(fileChanges);
 
-        if (!generatedConstantName && fileEdit.fileName === filePath) {
+        if (
+          !generatedConstantName &&
+          normalize(fileEdit.fileName) === normalize(filePath)
+        ) {
           const declaration = this.processor.findDeclaration(sortedChanges);
           if (declaration) {
             generatedConstantName = declaration.name;
@@ -229,7 +233,7 @@ Try:
         constantDeclarationLine &&
         constantColumn
       ) {
-        await this.tsServer.openFile(filePath);
+        await this.tsServer.reloadFile(filePath);
 
         const renameResult = (await this.tsServer.sendRequest('rename', {
           file: filePath,

@@ -4,12 +4,13 @@
 
 import { exec } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { extname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import { formatValidationError } from '../utils/validation-error.js';
 import type { OrganizeImportsOperation } from './organize-imports.js';
+import type { FileOperations } from './shared/file-operations.js';
 import type { TSServerGuard } from './shared/tsserver-guard.js';
 
 const execAsync = promisify(exec);
@@ -36,12 +37,13 @@ export class CleanupCodebaseOperation {
   constructor(
     private tsServerGuard: TSServerGuard,
     private organizeImportsOp: OrganizeImportsOperation,
+    private fileOps: FileOperations,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
     try {
       const validated = cleanupCodebaseSchema.parse(input);
-      const directory = resolve(validated.directory);
+      const directory = this.fileOps.resolvePath(validated.directory);
 
       const guardResult = await this.tsServerGuard.ensureReady();
       if (guardResult) return guardResult;
@@ -73,7 +75,7 @@ Try:
         if (validated.deleteUnusedFiles) {
           try {
             const result = await execAsync(
-              `npx tsr --recursive '${entrypoints}'`,
+              `npx tsr --recursive "${entrypoints}"`,
               {
                 cwd: directory,
                 maxBuffer: 10 * 1024 * 1024,
@@ -181,7 +183,7 @@ Try:
       // Only run tsr if deleteUnusedFiles is true
       if (validated.deleteUnusedFiles) {
         try {
-          await execAsync(`npx tsr --write --recursive '${entrypoints}'`, {
+          await execAsync(`npx tsr --write --recursive "${entrypoints}"`, {
             cwd: directory,
             maxBuffer: 10 * 1024 * 1024,
             timeout: 60000,
