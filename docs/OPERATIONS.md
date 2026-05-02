@@ -249,11 +249,19 @@ Input: {
     { symbol: "formatConfig", destinationPath: "src/config/formatConfig.ts" }
   ],
   organizeImports: true,
-  stopOnError: true
+  stopOnError: true,
+  preserveSourceFacadeExports: true,
+  preferFacadeImports: true,
+  responseMode: "summary"
 }
 
 Result: Moves both symbols and updates imports/exports across the project
 ```
+
+Options:
+- `preserveSourceFacadeExports`: re-export moved exported symbols from the original source file.
+- `preferFacadeImports`: when facade exports are preserved, keep outside callers importing from the original source file instead of deep destination files.
+- `responseMode`: defaults to `"summary"` and omits large edit payloads. Use `"full"` when exact edit details are needed.
 
 ### infer_return_type
 **What**: Generate perfect return type annotations automatically

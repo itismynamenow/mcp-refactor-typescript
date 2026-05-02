@@ -383,6 +383,9 @@ describe('Grouped Tools Schema Validation', () => {
           ],
           symbolKind: 'function',
           organizeImports: true,
+          preserveSourceFacadeExports: true,
+          preferFacadeImports: true,
+          responseMode: 'full',
         };
 
         expect(() => schema.parse(input)).not.toThrow();

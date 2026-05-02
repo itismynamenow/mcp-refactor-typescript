@@ -333,6 +333,101 @@ export const total = ALPHA + BETA + GAMMA;
     );
   });
 
+  it('should preserve source facade exports and prefer facade imports when requested', async () => {
+    const sourcePath = join(testDir, 'src', 'facade', 'index.ts');
+    const consumerPath = join(testDir, 'src', 'facade', 'consumer.ts');
+    const alphaPath = join(testDir, 'src', 'facade', 'alpha.ts');
+    const betaPath = join(testDir, 'src', 'facade', 'beta.ts');
+    await mkdir(join(testDir, 'src', 'facade'), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `export function alpha() {
+  return 1;
+}
+
+export function beta() {
+  return 2;
+}
+`,
+      'utf-8',
+    );
+    await writeFile(
+      consumerPath,
+      `import { alpha, beta } from '.';
+
+export const total = alpha() + beta();
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      organizeImports: true,
+      preserveSourceFacadeExports: true,
+      preferFacadeImports: true,
+      moves: [
+        { symbol: 'alpha', destinationPath: alphaPath },
+        { symbol: 'beta', destinationPath: betaPath },
+      ],
+    });
+
+    expect(response.success).toBe(true);
+    expect(
+      response.filesChanged.every(
+        (fileChange) => fileChange.edits.length === 0,
+      ),
+    ).toBe(true);
+    expect(response.data).toMatchObject({
+      responseMode: 'summary',
+      moved: 2,
+      requested: 2,
+    });
+
+    const sourceContent = await readFile(sourcePath, 'utf-8');
+    expect(sourceContent).toContain('export { alpha } from "./alpha";');
+    expect(sourceContent).toContain('export { beta } from "./beta";');
+
+    const consumerContent = await readFile(consumerPath, 'utf-8');
+    expect(consumerContent).toContain("import { alpha, beta } from '.';");
+    expect(consumerContent).not.toContain("from './alpha'");
+    expect(consumerContent).not.toContain("from './beta'");
+  });
+
+  it('should return full edit details when batch move responseMode is full', async () => {
+    const sourcePath = join(testDir, 'src', 'full-response-source.ts');
+    const destinationPath = join(testDir, 'src', 'full-response-alpha.ts');
+    await writeFile(
+      sourcePath,
+      `export function alpha() {
+  return 1;
+}
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      responseMode: 'full',
+      moves: [{ symbol: 'alpha', destinationPath }],
+    });
+
+    expect(response.success).toBe(true);
+    expect(
+      response.filesChanged.some((fileChange) => fileChange.edits.length > 0),
+    ).toBe(true);
+    const data = response.data as BatchResultData;
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0].success).toBe(true);
+  });
+
   it('should not leave self imports when moving dependent symbols together', async () => {
     const sourcePath = join(testDir, 'src', 'same-destination', 'index.ts');
     const consumerPath = join(

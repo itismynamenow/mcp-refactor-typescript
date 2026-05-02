@@ -22,10 +22,19 @@ import {
 import type { FileDiscovery } from './shared/file-discovery.js';
 import type { FileOperations } from './shared/file-operations.js';
 import {
+  type SymbolDeclaration,
   type SymbolDeclarationFinder,
   type SymbolKind,
   symbolKindValues,
 } from './shared/symbol-declarations.js';
+
+type BatchMoveResponseMode = 'summary' | 'full';
+
+interface CompletedMove {
+  symbol: string;
+  destinationPath: string;
+  declaration: SymbolDeclaration;
+}
 
 export const batchMoveSymbolsSchema = z.object({
   sourceFile: z.string().min(1, 'Source file cannot be empty'),
@@ -42,6 +51,9 @@ export const batchMoveSymbolsSchema = z.object({
   preview: z.boolean().optional(),
   organizeImports: z.boolean().optional(),
   stopOnError: z.boolean().optional(),
+  preserveSourceFacadeExports: z.boolean().optional(),
+  preferFacadeImports: z.boolean().optional(),
+  responseMode: z.enum(['summary', 'full']).optional(),
 });
 
 export class BatchMoveSymbolsOperation {
@@ -59,6 +71,7 @@ export class BatchMoveSymbolsOperation {
       const sourceFile = this.fileOps.resolvePath(validated.sourceFile);
       const results: BatchItemResult[] = [];
       const filesChanged: RefactorResult['filesChanged'] = [];
+      const completedMoves: CompletedMove[] = [];
 
       await this.discovery.discoverRelatedFiles(sourceFile);
 
@@ -84,6 +97,11 @@ export class BatchMoveSymbolsOperation {
             filesChanged: result.filesChanged,
           });
           if (result.success) {
+            completedMoves.push({
+              symbol: move.symbol,
+              destinationPath: this.fileOps.resolvePath(move.destinationPath),
+              declaration,
+            });
             mergeFilesChanged(filesChanged, result.filesChanged);
           } else if (validated.stopOnError) {
             break;
@@ -100,11 +118,32 @@ export class BatchMoveSymbolsOperation {
       }
 
       if (!validated.preview) {
+        if (validated.preserveSourceFacadeExports) {
+          const facadeExportChanges = await this.preserveSourceFacadeExports(
+            sourceFile,
+            completedMoves,
+          );
+          mergeFilesChanged(filesChanged, facadeExportChanges);
+        }
+
         const importRewriteChanges = await this.rewriteRemainingSourceImports(
           sourceFile,
           validated.moves,
         );
         mergeFilesChanged(filesChanged, importRewriteChanges);
+
+        if (
+          validated.preserveSourceFacadeExports &&
+          validated.preferFacadeImports
+        ) {
+          const facadeImportChanges =
+            await this.rewriteDestinationImportsToFacade(
+              sourceFile,
+              completedMoves,
+            );
+          mergeFilesChanged(filesChanged, facadeImportChanges);
+        }
+
         const destinationImportCleanupChanges =
           await this.removeDestinationSelfImports(sourceFile, validated.moves);
         mergeFilesChanged(filesChanged, destinationImportCleanupChanges);
@@ -123,11 +162,36 @@ export class BatchMoveSymbolsOperation {
         }
       }
 
+      const responseMode: BatchMoveResponseMode =
+        validated.responseMode ?? 'summary';
+      const responseFilesChanged =
+        responseMode === 'full'
+          ? filesChanged
+          : this.summarizeFilesChanged(filesChanged);
+      const successfulCount = results.filter((result) => result.success).length;
+
       return {
         success: results.every((result) => result.success),
-        message: `Moved ${results.filter((result) => result.success).length}/${validated.moves.length} symbol(s)`,
-        filesChanged,
-        data: { results },
+        message: `Moved ${successfulCount}/${validated.moves.length} symbol(s)`,
+        filesChanged: responseFilesChanged,
+        data:
+          responseMode === 'full'
+            ? { results }
+            : {
+                responseMode,
+                moved: successfulCount,
+                requested: validated.moves.length,
+                failed: results
+                  .filter((result) => !result.success)
+                  .map((result) => ({
+                    item: result.item,
+                    message: result.message,
+                  })),
+                filesChanged: responseFilesChanged.map((fileChange) => ({
+                  file: fileChange.file,
+                  path: fileChange.path,
+                })),
+              },
         nextActions: validated.organizeImports
           ? undefined
           : ['batch_organize_imports - Clean up imports in changed files'],
@@ -188,6 +252,166 @@ export class BatchMoveSymbolsOperation {
     }
 
     return filesChanged;
+  }
+
+  private async preserveSourceFacadeExports(
+    sourceFile: string,
+    moves: CompletedMove[],
+  ): Promise<RefactorResult['filesChanged']> {
+    const exportedMoves = moves.filter((move) => move.declaration.exported);
+    if (exportedMoves.length === 0) return [];
+
+    const originalContent = await readFile(sourceFile, 'utf-8');
+    const exportLines = this.buildFacadeExportLines(sourceFile, exportedMoves);
+    const missingExportLines = exportLines.filter(
+      (line) => !originalContent.includes(line),
+    );
+
+    if (missingExportLines.length === 0) return [];
+
+    const separator =
+      originalContent.length === 0 || originalContent.endsWith('\n')
+        ? ''
+        : '\n';
+    const content = `${originalContent}${separator}${missingExportLines.join('\n')}\n`;
+
+    await writeFile(sourceFile, content, 'utf-8');
+
+    return [
+      {
+        file: basename(sourceFile),
+        path: sourceFile,
+        edits: [
+          {
+            line: originalContent.split('\n').length,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      },
+    ];
+  }
+
+  private buildFacadeExportLines(
+    sourceFile: string,
+    moves: CompletedMove[],
+  ): string[] {
+    const symbolsByDestination = new Map<
+      string,
+      { typeOnly: string[]; values: string[] }
+    >();
+
+    for (const move of moves) {
+      const entry = symbolsByDestination.get(move.destinationPath) ?? {
+        typeOnly: [],
+        values: [],
+      };
+
+      if (
+        move.declaration.kind === 'type' ||
+        move.declaration.kind === 'interface'
+      ) {
+        entry.typeOnly.push(move.symbol);
+      } else {
+        entry.values.push(move.symbol);
+      }
+
+      symbolsByDestination.set(move.destinationPath, entry);
+    }
+
+    const exportLines: string[] = [];
+    for (const [destinationPath, symbols] of symbolsByDestination) {
+      const moduleSpecifier = this.buildRelativeModuleSpecifier(
+        sourceFile,
+        destinationPath,
+        '',
+      );
+
+      if (symbols.values.length > 0) {
+        exportLines.push(
+          `export { ${symbols.values.join(', ')} } from "${moduleSpecifier}";`,
+        );
+      }
+
+      if (symbols.typeOnly.length > 0) {
+        exportLines.push(
+          `export type { ${symbols.typeOnly.join(', ')} } from "${moduleSpecifier}";`,
+        );
+      }
+    }
+
+    return exportLines;
+  }
+
+  private async rewriteDestinationImportsToFacade(
+    sourceFile: string,
+    moves: CompletedMove[],
+  ): Promise<RefactorResult['filesChanged']> {
+    const projectRoot = this.findProjectRoot(sourceFile);
+    const projectFiles = await this.scanProjectFiles(projectRoot);
+    const movedSymbolsByDestination =
+      this.groupCompletedMovesByDestination(moves);
+    const destinationPaths = new Set(movedSymbolsByDestination.keys());
+
+    const filesChanged: RefactorResult['filesChanged'] = [];
+
+    for (const filePath of projectFiles) {
+      const normalizedPath = normalize(filePath);
+      if (
+        normalizedPath === normalize(sourceFile) ||
+        destinationPaths.has(normalizedPath)
+      ) {
+        continue;
+      }
+
+      const originalContent = await readFile(filePath, 'utf-8');
+      let content = originalContent;
+
+      for (const [destinationPath, symbols] of movedSymbolsByDestination) {
+        content = this.rewriteImportsForDestination(
+          content,
+          filePath,
+          destinationPath,
+          sourceFile,
+          symbols,
+        );
+      }
+
+      if (content === originalContent) continue;
+
+      await writeFile(filePath, content, 'utf-8');
+      filesChanged.push({
+        file: basename(filePath),
+        path: filePath,
+        edits: [
+          {
+            line: 1,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      });
+    }
+
+    return filesChanged;
+  }
+
+  private groupCompletedMovesByDestination(
+    moves: CompletedMove[],
+  ): Map<string, Set<string>> {
+    const movedSymbolsByDestination = new Map<string, Set<string>>();
+
+    for (const move of moves) {
+      const symbols =
+        movedSymbolsByDestination.get(move.destinationPath) ??
+        new Set<string>();
+      symbols.add(move.symbol);
+      movedSymbolsByDestination.set(move.destinationPath, symbols);
+    }
+
+    return movedSymbolsByDestination;
   }
 
   private async removeDestinationSelfImports(
@@ -355,6 +579,16 @@ export class BatchMoveSymbolsOperation {
       ?.trim();
   }
 
+  private summarizeFilesChanged(
+    filesChanged: RefactorResult['filesChanged'],
+  ): RefactorResult['filesChanged'] {
+    return filesChanged.map((fileChange) => ({
+      file: fileChange.file,
+      path: fileChange.path,
+      edits: [],
+    }));
+  }
+
   private moduleSpecifierTargetsFile(
     importerPath: string,
     moduleSpecifier: string,
@@ -390,11 +624,18 @@ export class BatchMoveSymbolsOperation {
       extension.length > 0
         ? destinationPath.slice(0, -extension.length)
         : destinationPath;
-    let specifier = relative(dirname(importerPath), destinationWithoutExtension)
+    const targetPath =
+      basename(destinationWithoutExtension) === 'index' &&
+      !sourceModuleSpecifier.endsWith('.js')
+        ? dirname(destinationWithoutExtension)
+        : destinationWithoutExtension;
+    let specifier = relative(dirname(importerPath), targetPath)
       .split(sep)
       .join('/');
 
-    if (!specifier.startsWith('.')) {
+    if (specifier === '') {
+      specifier = '.';
+    } else if (!specifier.startsWith('.')) {
       specifier = `./${specifier}`;
     }
 

@@ -298,6 +298,9 @@ Use when: Renaming, extracting, or moving symbols between files. Always use this
       symbolKind: symbolKindSchema,
       organizeImports: z.boolean().optional(),
       stopOnError: z.boolean().optional(),
+      preserveSourceFacadeExports: z.boolean().optional(),
+      preferFacadeImports: z.boolean().optional(),
+      responseMode: z.enum(['summary', 'full']).optional(),
       preview: z.boolean().optional(),
       projectName: projectNameSchema,
     })
