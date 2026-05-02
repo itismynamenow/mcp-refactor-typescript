@@ -566,4 +566,67 @@ export function createTaskFromTravel(travel: Travel, agent: Agent): Task {
     expect(destinationContent).toContain('function createTaskFromTravel');
     expect(destinationContent).not.toContain('type type');
   });
+
+  it('should not import undefined or mark runtime enum imports as type-only', async () => {
+    const sourcePath = join(testDir, 'src', 'runtime-imports', 'index.ts');
+    const itemsPath = join(testDir, 'src', 'runtime-imports', 'items.ts');
+    const destinationPath = join(
+      testDir,
+      'src',
+      'runtime-imports',
+      'itemHelpers.ts',
+    );
+    await mkdir(join(testDir, 'src', 'runtime-imports'), { recursive: true });
+    await writeFile(
+      itemsPath,
+      `export enum ItemQuality {
+  Common = 'common',
+  Rare = 'rare',
+}
+
+export interface Item {
+  quality?: ItemQuality;
+}
+
+export const itemsById: Record<string, Item> = {
+  alpha: { quality: ItemQuality.Rare },
+};
+`,
+      'utf-8',
+    );
+    await writeFile(
+      sourcePath,
+      `import { type Item, ItemQuality, itemsById } from './items';
+
+export function resolveItem(id: string): Item | undefined {
+  return itemsById[id];
+}
+
+export function isTradableItem(item: Item): boolean {
+  return item.quality !== undefined && item.quality !== ItemQuality.Common;
+}
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      organizeImports: true,
+      moves: [
+        { symbol: 'resolveItem', destinationPath },
+        { symbol: 'isTradableItem', destinationPath },
+      ],
+    });
+
+    expect(response.success).toBe(true);
+
+    const destinationContent = await readFile(destinationPath, 'utf-8');
+    expect(destinationContent).toContain('ItemQuality.Common');
+    expect(destinationContent).not.toContain('import { undefined }');
+    expect(destinationContent).not.toContain('type ItemQuality');
+  });
 });

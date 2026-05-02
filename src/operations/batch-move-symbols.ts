@@ -569,7 +569,8 @@ export class BatchMoveSymbolsOperation {
     return namedImports
       .split(',')
       .map((part: string) => part.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((part) => this.getImportedName(part) !== 'undefined');
   }
 
   private getImportedName(importedSymbol: string): string | undefined {

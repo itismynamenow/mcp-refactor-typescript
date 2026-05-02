@@ -265,6 +265,94 @@ Try:
   }
 
   private cleanMoveImportArtifacts(content: string): string {
-    return content.replace(/\btype\s+type\b/g, 'type');
+    return this.promoteRuntimeTypeImports(
+      this.removeUndefinedNamedImports(
+        content.replace(/\btype\s+type\b/g, 'type'),
+      ),
+    );
+  }
+
+  private removeUndefinedNamedImports(content: string): string {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+
+    return content.replace(
+      importPattern,
+      (fullMatch, typeKeyword, namedImports, quote, moduleSpecifier) => {
+        const imports = this.parseNamedImports(namedImports).filter(
+          (importedSymbol) =>
+            this.getImportedName(importedSymbol) !== 'undefined',
+        );
+
+        if (imports.length === this.parseNamedImports(namedImports).length) {
+          return fullMatch;
+        }
+
+        if (imports.length === 0) return '';
+
+        return `import ${typeKeyword ?? ''}{ ${imports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`;
+      },
+    );
+  }
+
+  private promoteRuntimeTypeImports(content: string): string {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+    const bodyWithoutImports = content.replace(importPattern, '');
+
+    return content.replace(
+      importPattern,
+      (fullMatch, typeKeyword, namedImports, quote, moduleSpecifier) => {
+        const imports = this.parseNamedImports(namedImports);
+        let changed = false;
+        const promotedImports = imports.map((importedSymbol) => {
+          const importedName = this.getImportedName(importedSymbol);
+          if (!importedName || !this.isTypeOnlySpecifier(importedSymbol)) {
+            return importedSymbol;
+          }
+
+          if (!this.isUsedAsRuntimeValue(bodyWithoutImports, importedName)) {
+            return importedSymbol;
+          }
+
+          changed = true;
+          return importedSymbol.replace(/^type\s+/, '');
+        });
+
+        if (!changed) return fullMatch;
+
+        const wholeImportIsTypeOnly = !!typeKeyword;
+        if (wholeImportIsTypeOnly) {
+          return `import { ${promotedImports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`;
+        }
+
+        return `import { ${promotedImports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`;
+      },
+    );
+  }
+
+  private parseNamedImports(namedImports: string): string[] {
+    return namedImports
+      .split(',')
+      .map((part: string) => part.trim())
+      .filter(Boolean);
+  }
+
+  private getImportedName(importedSymbol: string): string | undefined {
+    return importedSymbol
+      .replace(/^type\s+/, '')
+      .split(/\s+as\s+/)[0]
+      ?.trim();
+  }
+
+  private isTypeOnlySpecifier(importedSymbol: string): boolean {
+    return importedSymbol.trim().startsWith('type ');
+  }
+
+  private isUsedAsRuntimeValue(content: string, importedName: string): boolean {
+    const escapedName = importedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(
+      `(?:\\bnew\\s+${escapedName}\\b|\\binstanceof\\s+${escapedName}\\b|\\b${escapedName}\\s*[.(])`,
+    ).test(content);
   }
 }
