@@ -105,6 +105,9 @@ export class BatchMoveSymbolsOperation {
           validated.moves,
         );
         mergeFilesChanged(filesChanged, importRewriteChanges);
+        const destinationImportCleanupChanges =
+          await this.removeDestinationSelfImports(sourceFile, validated.moves);
+        mergeFilesChanged(filesChanged, destinationImportCleanupChanges);
       }
 
       if (validated.organizeImports && !validated.preview) {
@@ -145,19 +148,15 @@ export class BatchMoveSymbolsOperation {
   ): Promise<RefactorResult['filesChanged']> {
     const projectRoot = this.findProjectRoot(sourceFile);
     const projectFiles = await this.scanProjectFiles(projectRoot);
-    const movedSymbolsByDestination = new Map<string, Set<string>>();
-
-    for (const move of moves) {
-      const destinationPath = this.fileOps.resolvePath(move.destinationPath);
-      const symbols =
-        movedSymbolsByDestination.get(destinationPath) ?? new Set<string>();
-      symbols.add(move.symbol);
-      movedSymbolsByDestination.set(destinationPath, symbols);
-    }
+    const movedSymbolsByDestination =
+      this.groupMovedSymbolsByDestination(moves);
+    const destinationPaths = new Set(movedSymbolsByDestination.keys());
 
     const filesChanged: RefactorResult['filesChanged'] = [];
 
     for (const filePath of projectFiles) {
+      if (destinationPaths.has(normalize(filePath))) continue;
+
       const originalContent = await readFile(filePath, 'utf-8');
       let content = originalContent;
 
@@ -191,6 +190,100 @@ export class BatchMoveSymbolsOperation {
     return filesChanged;
   }
 
+  private async removeDestinationSelfImports(
+    sourceFile: string,
+    moves: Array<{ symbol: string; destinationPath: string }>,
+  ): Promise<RefactorResult['filesChanged']> {
+    const movedSymbolsByDestination =
+      this.groupMovedSymbolsByDestination(moves);
+    const filesChanged: RefactorResult['filesChanged'] = [];
+
+    for (const [destinationPath, movedSymbols] of movedSymbolsByDestination) {
+      const originalContent = await readFile(destinationPath, 'utf-8');
+      const content = this.removeInvalidDestinationImports(
+        originalContent,
+        destinationPath,
+        sourceFile,
+        movedSymbols,
+      );
+
+      if (content === originalContent) continue;
+
+      await writeFile(destinationPath, content, 'utf-8');
+      filesChanged.push({
+        file: basename(destinationPath),
+        path: destinationPath,
+        edits: [
+          {
+            line: 1,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      });
+    }
+
+    return filesChanged;
+  }
+
+  private groupMovedSymbolsByDestination(
+    moves: Array<{ symbol: string; destinationPath: string }>,
+  ): Map<string, Set<string>> {
+    const movedSymbolsByDestination = new Map<string, Set<string>>();
+
+    for (const move of moves) {
+      const destinationPath = this.fileOps.resolvePath(move.destinationPath);
+      const symbols =
+        movedSymbolsByDestination.get(destinationPath) ?? new Set<string>();
+      symbols.add(move.symbol);
+      movedSymbolsByDestination.set(destinationPath, symbols);
+    }
+
+    return movedSymbolsByDestination;
+  }
+
+  private removeInvalidDestinationImports(
+    content: string,
+    destinationPath: string,
+    sourceFile: string,
+    movedSymbols: Set<string>,
+  ): string {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+
+    return content.replace(
+      importPattern,
+      (fullMatch, typeKeyword, namedImports, quote, moduleSpecifier) => {
+        const imports = this.parseNamedImports(namedImports);
+        const targetsDestination = this.moduleSpecifierTargetsFile(
+          destinationPath,
+          moduleSpecifier,
+          destinationPath,
+        );
+        const targetsSource = this.moduleSpecifierTargetsFile(
+          destinationPath,
+          moduleSpecifier,
+          sourceFile,
+        );
+
+        if (!targetsDestination && !targetsSource) return fullMatch;
+
+        const remainingImports = targetsDestination
+          ? []
+          : imports.filter((importedSymbol) => {
+              const importedName = this.getImportedName(importedSymbol);
+              return !importedName || !movedSymbols.has(importedName);
+            });
+
+        if (remainingImports.length === imports.length) return fullMatch;
+        if (remainingImports.length === 0) return '';
+
+        return `import ${typeKeyword ?? ''}{ ${remainingImports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`;
+      },
+    );
+  }
+
   private rewriteImportsForDestination(
     content: string,
     importerPath: string,
@@ -215,14 +308,13 @@ export class BatchMoveSymbolsOperation {
         }
 
         const imports = namedImports
-          .split(',')
-          .map((part: string) => part.trim())
-          .filter(Boolean);
+          ? this.parseNamedImports(namedImports)
+          : [];
         const movedImports: string[] = [];
         const remainingImports: string[] = [];
 
         for (const importedSymbol of imports) {
-          const importedName = importedSymbol.split(/\s+as\s+/)[0]?.trim();
+          const importedName = this.getImportedName(importedSymbol);
           if (importedName && movedSymbols.has(importedName)) {
             movedImports.push(importedSymbol);
           } else {
@@ -247,6 +339,20 @@ export class BatchMoveSymbolsOperation {
         return [sourceImport, destinationImport].filter(Boolean).join('\n');
       },
     );
+  }
+
+  private parseNamedImports(namedImports: string): string[] {
+    return namedImports
+      .split(',')
+      .map((part: string) => part.trim())
+      .filter(Boolean);
+  }
+
+  private getImportedName(importedSymbol: string): string | undefined {
+    return importedSymbol
+      .replace(/^type\s+/, '')
+      .split(/\s+as\s+/)[0]
+      ?.trim();
   }
 
   private moduleSpecifierTargetsFile(
@@ -279,10 +385,11 @@ export class BatchMoveSymbolsOperation {
     destinationPath: string,
     sourceModuleSpecifier: string,
   ): string {
-    const destinationWithoutExtension = destinationPath.slice(
-      0,
-      -extname(destinationPath).length,
-    );
+    const extension = extname(destinationPath);
+    const destinationWithoutExtension =
+      extension.length > 0
+        ? destinationPath.slice(0, -extension.length)
+        : destinationPath;
     let specifier = relative(dirname(importerPath), destinationWithoutExtension)
       .split(sep)
       .join('/');

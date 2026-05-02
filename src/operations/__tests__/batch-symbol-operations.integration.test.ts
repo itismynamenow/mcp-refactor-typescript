@@ -332,4 +332,80 @@ export const total = ALPHA + BETA + GAMMA;
       'export const GAMMA = 3;',
     );
   });
+
+  it('should not leave self imports when moving dependent symbols together', async () => {
+    const sourcePath = join(testDir, 'src', 'same-destination', 'index.ts');
+    const consumerPath = join(
+      testDir,
+      'src',
+      'same-destination',
+      'consumer.ts',
+    );
+    const destinationPath = join(
+      testDir,
+      'src',
+      'same-destination',
+      'moved.ts',
+    );
+    await mkdir(join(testDir, 'src', 'same-destination'), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `export const LOCAL_OFFSET = 2;
+
+export function alpha() {
+  return LOCAL_OFFSET;
+}
+
+export function beta() {
+  return alpha() + 1;
+}
+
+export function gamma() {
+  return beta() + alpha();
+}
+`,
+      'utf-8',
+    );
+    await writeFile(
+      consumerPath,
+      `import { alpha, beta, gamma } from '.';
+
+export const total = alpha() + beta() + gamma();
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      organizeImports: true,
+      moves: [
+        { symbol: 'alpha', destinationPath },
+        { symbol: 'beta', destinationPath },
+        { symbol: 'gamma', destinationPath },
+      ],
+    });
+
+    expect(response.success).toBe(true);
+    expect(response.message).toBe('Moved 3/3 symbol(s)');
+
+    const destinationContent = await readFile(destinationPath, 'utf-8');
+    expect(destinationContent).toContain('function alpha');
+    expect(destinationContent).toContain('function beta');
+    expect(destinationContent).toContain('function gamma');
+    expect(destinationContent).not.toContain("from './moved'");
+    expect(destinationContent).not.toContain("from '.'");
+    expect(destinationContent).not.toContain('import { alpha');
+    expect(destinationContent).not.toContain('import { beta');
+    expect(destinationContent).not.toContain('import { gamma');
+
+    const consumerContent = await readFile(consumerPath, 'utf-8');
+    expect(consumerContent).toContain(
+      "import { alpha, beta, gamma } from './moved';",
+    );
+    expect(consumerContent).not.toContain("from '.'");
+  });
 });

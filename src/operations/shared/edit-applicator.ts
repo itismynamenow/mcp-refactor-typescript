@@ -33,6 +33,8 @@ export class EditApplicator {
       const startOffset = change.start.offset - 1;
       const endOffset = change.end.offset - 1;
 
+      this.validateEditRange(result, change);
+
       if (startLine === endLine) {
         result[startLine] =
           result[startLine].substring(0, startOffset) +
@@ -65,6 +67,8 @@ export class EditApplicator {
       const endLine = change.end.line - 1;
       const startOffset = change.start.offset - 1;
       const endOffset = change.end.offset - 1;
+
+      this.validateEditRange(originalLines, change);
 
       const oldText =
         startLine === endLine
@@ -112,5 +116,32 @@ export class EditApplicator {
     }
 
     return parts.join('\n');
+  }
+
+  private validateEditRange(lines: string[], change: TSTextChange): void {
+    const startLine = change.start.line - 1;
+    const endLine = change.end.line - 1;
+    const startOffset = change.start.offset - 1;
+    const endOffset = change.end.offset - 1;
+
+    if (
+      startLine < 0 ||
+      endLine < startLine ||
+      endLine >= lines.length ||
+      startOffset < 0 ||
+      endOffset < 0
+    ) {
+      throw this.invalidEditRangeError(lines, change);
+    }
+
+    if (startLine === endLine && endOffset < startOffset) {
+      throw this.invalidEditRangeError(lines, change);
+    }
+  }
+
+  private invalidEditRangeError(lines: string[], change: TSTextChange): Error {
+    return new Error(
+      `Invalid edit range ${change.start.line}:${change.start.offset}-${change.end.line}:${change.end.offset} for file with ${lines.length} line(s)`,
+    );
   }
 }

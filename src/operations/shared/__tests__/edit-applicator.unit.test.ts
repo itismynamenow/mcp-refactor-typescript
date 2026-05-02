@@ -228,6 +228,23 @@ describe('EditApplicator', () => {
       // Assert
       expect(lines).toEqual(original);
     });
+
+    it('should report invalid edit ranges clearly', () => {
+      // Arrange
+      const lines = ['const value = 1;'];
+      const changes: TSTextChange[] = [
+        {
+          start: { line: 2, offset: 1 },
+          end: { line: 2, offset: 5 },
+          newText: 'value',
+        },
+      ];
+
+      // Act / Assert
+      expect(() => applicator.applyEdits(lines, changes)).toThrow(
+        'Invalid edit range 2:1-2:5 for file with 1 line(s)',
+      );
+    });
   });
 
   describe('buildFileChanges', () => {
@@ -312,6 +329,23 @@ describe('EditApplicator', () => {
 
       // Assert
       expect(result.edits).toHaveLength(2);
+    });
+
+    it('should report invalid file-change ranges clearly', () => {
+      // Arrange
+      const originalLines = ['const value = 1;'];
+      const changes: TSTextChange[] = [
+        {
+          start: { line: 1, offset: 7 },
+          end: { line: 3, offset: 1 },
+          newText: 'renamed',
+        },
+      ];
+
+      // Act / Assert
+      expect(() =>
+        applicator.buildFileChanges(originalLines, changes, '/test/file.ts'),
+      ).toThrow('Invalid edit range 1:7-3:1 for file with 1 line(s)');
     });
   });
 });
