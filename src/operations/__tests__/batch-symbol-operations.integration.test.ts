@@ -408,4 +408,67 @@ export const total = alpha() + beta() + gamma();
     );
     expect(consumerContent).not.toContain("from '.'");
   });
+
+  it('should clean duplicated type modifiers from same-destination moves', async () => {
+    const sourcePath = join(testDir, 'src', 'typed-move', 'index.ts');
+    const destinationPath = join(testDir, 'src', 'typed-move', 'createTask.ts');
+    await mkdir(join(testDir, 'src', 'typed-move'), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `export enum TaskKind {
+  Travel = 'travel',
+}
+
+export enum TaskPriority {
+  Routine = 10,
+}
+
+export interface Agent {
+  id: string;
+}
+
+export interface Travel {
+  toLocationId: string | null;
+}
+
+export interface Task {
+  kind: TaskKind;
+  priority: TaskPriority;
+  summary: string;
+}
+
+function getTravelSummary(travel: Travel): string {
+  return travel.toLocationId ? 'Move to location.' : 'Move on map.';
+}
+
+export function createTaskFromTravel(travel: Travel, agent: Agent): Task {
+  return {
+    kind: TaskKind.Travel,
+    priority: TaskPriority.Routine,
+    summary: \`\${agent.id}: \${getTravelSummary(travel)}\`,
+  };
+}
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'function',
+      organizeImports: true,
+      moves: [
+        { symbol: 'getTravelSummary', destinationPath },
+        { symbol: 'createTaskFromTravel', destinationPath },
+      ],
+    });
+
+    expect(response.success).toBe(true);
+
+    const destinationContent = await readFile(destinationPath, 'utf-8');
+    expect(destinationContent).toContain('function createTaskFromTravel');
+    expect(destinationContent).not.toContain('type type');
+  });
 });

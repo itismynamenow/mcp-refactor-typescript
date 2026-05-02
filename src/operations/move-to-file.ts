@@ -179,9 +179,9 @@ This might indicate:
           });
 
         if (isNewFile) {
-          const newContent = fileEdit.textChanges
-            .map((c) => c.newText)
-            .join('');
+          const newContent = this.cleanMoveImportArtifacts(
+            fileEdit.textChanges.map((c) => c.newText).join(''),
+          );
           const newLines = newContent.split('\n');
           const fileName = basename(fileEdit.fileName);
 
@@ -208,9 +208,15 @@ This might indicate:
             originalLines,
             sortedChanges,
           );
+          const cleanedUpdatedLines = this.cleanMoveImportArtifacts(
+            updatedLines.join('\n'),
+          ).split('\n');
 
           if (!validated.preview) {
-            await this.fileOps.writeLines(fileEdit.fileName, updatedLines);
+            await this.fileOps.writeLines(
+              fileEdit.fileName,
+              cleanedUpdatedLines,
+            );
           }
 
           filesChanged.push(fileChanges);
@@ -256,5 +262,9 @@ Try:
         filesChanged: [],
       };
     }
+  }
+
+  private cleanMoveImportArtifacts(content: string): string {
+    return content.replace(/\btype\s+type\b/g, 'type');
   }
 }
