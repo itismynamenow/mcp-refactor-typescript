@@ -89,9 +89,10 @@ describe('Grouped Tools Integration', () => {
   describe('code_quality Tool', () => {
     const qualityTool = groupedTools[1];
 
-    it('should support organize_imports, fix_all, remove_unused operations', () => {
+    it('should support organize_imports, batch_organize_imports, fix_all, remove_unused operations', () => {
       expect(qualityTool.operations).toEqual([
         'organize_imports',
+        'batch_organize_imports',
         'fix_all',
         'remove_unused',
       ]);
@@ -114,13 +115,15 @@ describe('Grouped Tools Integration', () => {
   describe('refactoring Tool', () => {
     const refactorTool = groupedTools[2];
 
-    it('should support rename, extract, and move operations', () => {
+    it('should support rename, batch rename, extract, and move operations', () => {
       expect(refactorTool.operations).toEqual([
         'rename',
+        'batch_rename_symbols',
         'extract_function',
         'extract_constant',
         'extract_variable',
         'move_to_file',
+        'batch_move_symbols',
         'infer_return_type',
       ]);
     });
@@ -162,6 +165,8 @@ describe('Grouped Tools Integration', () => {
     it('should support workspace-wide operations', () => {
       expect(workspaceTool.operations).toEqual([
         'find_references',
+        'batch_find_references',
+        'find_symbol_declarations',
         'refactor_module',
         'cleanup_codebase',
         'restart_tsserver',

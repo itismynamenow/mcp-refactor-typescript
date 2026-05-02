@@ -115,16 +115,16 @@ Example:
 
 ## Available Tools (v2.0)
 
-The server exposes **4 grouped tools** with **15 operations** total. Each tool has a specific domain and uses the `operation` parameter to specify the action.
+The server exposes **4 grouped tools** with **21 operations** total. Each tool has a specific domain and uses the `operation` parameter to specify the action.
 
 ### Tool Groups
 
 | Tool | Operations | Use When |
 |------|-----------|----------|
 | **file_operations** | `rename_file`, `move_file`, `batch_move_files` | Renaming/moving files, reorganizing code structure |
-| **code_quality** | `organize_imports`, `fix_all`, `remove_unused` | Before commits, after refactoring, cleanup tasks |
-| **refactoring** | `rename`, `extract_function`, `extract_constant`, `extract_variable`, `infer_return_type` | Renaming symbols, reducing duplication, improving structure |
-| **workspace** | `find_references`, `refactor_module`, `cleanup_codebase`, `restart_tsserver` | Understanding impact, large-scale refactoring, TypeScript issues |
+| **code_quality** | `organize_imports`, `batch_organize_imports`, `fix_all`, `remove_unused` | Before commits, after refactoring, cleanup tasks |
+| **refactoring** | `rename`, `batch_rename_symbols`, `extract_function`, `extract_constant`, `extract_variable`, `move_to_file`, `batch_move_symbols`, `infer_return_type` | Renaming symbols, reducing duplication, improving structure |
+| **workspace** | `find_references`, `batch_find_references`, `find_symbol_declarations`, `refactor_module`, `cleanup_codebase`, `restart_tsserver` | Understanding impact, large-scale refactoring, TypeScript issues |
 
 ### Operations Reference
 
@@ -134,14 +134,20 @@ The server exposes **4 grouped tools** with **15 operations** total. Each tool h
 | **move_file** | file_operations | Move file to different directory with import updates |
 | **batch_move_files** | file_operations | Move multiple files atomically |
 | **organize_imports** | code_quality | Sort and remove unused imports (preserves side-effects) |
+| **batch_organize_imports** | code_quality | Organize imports across multiple files |
 | **fix_all** | code_quality | Apply all available TypeScript quick fixes |
 | **remove_unused** | code_quality | Remove unused variables and imports safely |
 | **rename** | refactoring | Rename symbols across all files with automatic import/export updates |
+| **batch_rename_symbols** | refactoring | Rename multiple top-level symbols by declaration name |
 | **extract_function** | refactoring | Extract code to function with auto-detected parameters/types |
 | **extract_constant** | refactoring | Extract magic numbers/strings to named constants |
 | **extract_variable** | refactoring | Extract expressions to local variables |
+| **move_to_file** | refactoring | Move one top-level symbol to another file |
+| **batch_move_symbols** | refactoring | Move multiple top-level symbols to destination files |
 | **infer_return_type** | refactoring | Add return type annotations automatically |
 | **find_references** | workspace | Find all usages with type-aware analysis |
+| **batch_find_references** | workspace | Find references for multiple top-level symbols |
+| **find_symbol_declarations** | workspace | List top-level symbol declarations, lines, visibility, and import dependencies |
 | **refactor_module** | workspace | Complete workflow: move + organize + fix |
 | **cleanup_codebase** | workspace | Clean entire codebase (organize + optionally delete unused) |
 | **restart_tsserver** | workspace | Restart TypeScript server for fresh project state |

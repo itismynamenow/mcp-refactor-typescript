@@ -26,6 +26,7 @@ export interface RefactorResult {
       new: string;
     }>;
   }>;
+  data?: unknown;
   nextActions?: string[];
   preview?: {
     filesAffected: number;

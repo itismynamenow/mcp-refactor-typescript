@@ -1,10 +1,15 @@
 import type { TypeScriptServer } from '../../language-servers/typescript/tsserver-client.js';
+import { BatchFindReferencesOperation } from '../batch-find-references.js';
 import { BatchMoveFilesOperation } from '../batch-move-files.js';
+import { BatchMoveSymbolsOperation } from '../batch-move-symbols.js';
+import { BatchOrganizeImportsOperation } from '../batch-organize-imports.js';
+import { BatchRenameSymbolsOperation } from '../batch-rename-symbols.js';
 import { CleanupCodebaseOperation } from '../cleanup-codebase.js';
 import { ExtractConstantOperation } from '../extract-constant.js';
 import { ExtractFunctionOperation } from '../extract-function.js';
 import { ExtractVariableOperation } from '../extract-variable.js';
 import { FindReferencesOperation } from '../find-references.js';
+import { FindSymbolDeclarationsOperation } from '../find-symbol-declarations.js';
 import { FixAllOperation } from '../fix-all.js';
 import { InferReturnTypeOperation } from '../infer-return-type.js';
 import { MoveFileOperation } from '../move-file.js';
@@ -22,6 +27,7 @@ import { FileMover } from './file-mover.js';
 import { FileOperations } from './file-operations.js';
 import { FormatConfigurator } from './format-configurator.js';
 import { IndentationDetector } from './indentation-detector.js';
+import { SymbolDeclarationFinder } from './symbol-declarations.js';
 import { TextPositionConverter } from './text-position-converter.js';
 import { TSServerGuard } from './tsserver-guard.js';
 
@@ -64,6 +70,19 @@ export function createBatchMoveFilesOperation(
   );
 }
 
+export function createBatchMoveSymbolsOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
+  return new BatchMoveSymbolsOperation(
+    new SymbolDeclarationFinder(fileOps),
+    createMoveToFileOperation(tsServer, cwd),
+    createOrganizeImportsOperation(tsServer, cwd),
+    fileOps,
+  );
+}
+
 export function createRenameOperation(
   tsServer: TypeScriptServer,
   cwd: string = process.cwd(),
@@ -88,6 +107,15 @@ export function createOrganizeImportsOperation(
     new EditApplicator(),
     new FormatConfigurator(tsServer, new IndentationDetector()),
     new TSServerGuard(tsServer, cwd),
+  );
+}
+
+export function createBatchOrganizeImportsOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  return new BatchOrganizeImportsOperation(
+    createOrganizeImportsOperation(tsServer, cwd),
   );
 }
 
@@ -125,6 +153,39 @@ export function createFindReferencesOperation(
     new TextPositionConverter(),
     new TSServerGuard(tsServer, cwd),
     new FileDiscovery(tsServer),
+  );
+}
+
+export function createBatchFindReferencesOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
+  return new BatchFindReferencesOperation(
+    new SymbolDeclarationFinder(fileOps),
+    createFindReferencesOperation(tsServer, cwd),
+  );
+}
+
+export function createFindSymbolDeclarationsOperation(
+  _tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
+  return new FindSymbolDeclarationsOperation(
+    new SymbolDeclarationFinder(fileOps),
+    fileOps,
+  );
+}
+
+export function createBatchRenameSymbolsOperation(
+  tsServer: TypeScriptServer,
+  cwd: string = process.cwd(),
+) {
+  const fileOps = new FileOperations(cwd);
+  return new BatchRenameSymbolsOperation(
+    new SymbolDeclarationFinder(fileOps),
+    createRenameOperation(tsServer, cwd),
   );
 }
 

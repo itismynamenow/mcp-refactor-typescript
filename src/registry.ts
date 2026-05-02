@@ -9,12 +9,17 @@ import {
 } from './language-servers/typescript/tsserver-client.js';
 import { OperationName } from './operation-name.js';
 import {
+  createBatchFindReferencesOperation,
   createBatchMoveFilesOperation,
+  createBatchMoveSymbolsOperation,
+  createBatchOrganizeImportsOperation,
+  createBatchRenameSymbolsOperation,
   createCleanupCodebaseOperation,
   createExtractConstantOperation,
   createExtractFunctionOperation,
   createExtractVariableOperation,
   createFindReferencesOperation,
+  createFindSymbolDeclarationsOperation,
   createFixAllOperation,
   createInferReturnTypeOperation,
   createMoveFileOperation,
@@ -65,8 +70,16 @@ export class OperationRegistry {
       createBatchMoveFilesOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
+      OperationName.BATCH_MOVE_SYMBOLS,
+      createBatchMoveSymbolsOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
       OperationName.ORGANIZE_IMPORTS,
       createOrganizeImportsOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
+      OperationName.BATCH_ORGANIZE_IMPORTS,
+      createBatchOrganizeImportsOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.FIX_ALL,
@@ -81,6 +94,14 @@ export class OperationRegistry {
       createFindReferencesOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
+      OperationName.BATCH_FIND_REFERENCES,
+      createBatchFindReferencesOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
+      OperationName.FIND_SYMBOL_DECLARATIONS,
+      createFindSymbolDeclarationsOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
       OperationName.EXTRACT_FUNCTION,
       createExtractFunctionOperation(this.tsServer, this.cwd),
     );
@@ -91,6 +112,10 @@ export class OperationRegistry {
     this.operations.set(
       OperationName.EXTRACT_VARIABLE,
       createExtractVariableOperation(this.tsServer, this.cwd),
+    );
+    this.operations.set(
+      OperationName.BATCH_RENAME_SYMBOLS,
+      createBatchRenameSymbolsOperation(this.tsServer, this.cwd),
     );
     this.operations.set(
       OperationName.MOVE_TO_FILE,

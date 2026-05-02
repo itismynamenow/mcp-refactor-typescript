@@ -178,7 +178,7 @@ describe('Grouped Tools Schema Validation', () => {
         // Act & Assert
         expect(() => schema.parse(input)).toThrow(z.ZodError);
         expect(() => schema.parse(input)).toThrow(
-          /name is required for rename operation/,
+          /Invalid refactoring operation parameters/,
         );
       });
 
@@ -370,6 +370,59 @@ describe('Grouped Tools Schema Validation', () => {
       });
     });
 
+    describe('batch_move_symbols Operation', () => {
+      it('should accept batch_move_symbols with moves', () => {
+        const input = {
+          operation: 'batch_move_symbols',
+          sourceFile: '/path/to/source.ts',
+          moves: [
+            {
+              symbol: 'alpha',
+              destinationPath: '/path/to/alpha.ts',
+            },
+          ],
+          symbolKind: 'function',
+          organizeImports: true,
+        };
+
+        expect(() => schema.parse(input)).not.toThrow();
+      });
+
+      it('should reject batch_move_symbols without moves', () => {
+        const input = {
+          operation: 'batch_move_symbols',
+          sourceFile: '/path/to/source.ts',
+        };
+
+        expect(() => schema.parse(input)).toThrow(z.ZodError);
+      });
+    });
+
+    describe('batch_rename_symbols Operation', () => {
+      it('should accept batch_rename_symbols with renames', () => {
+        const input = {
+          operation: 'batch_rename_symbols',
+          renames: [
+            {
+              filePath: '/path/to/file.ts',
+              symbol: 'oldName',
+              newName: 'newName',
+            },
+          ],
+        };
+
+        expect(() => schema.parse(input)).not.toThrow();
+      });
+
+      it('should reject batch_rename_symbols without renames', () => {
+        const input = {
+          operation: 'batch_rename_symbols',
+        };
+
+        expect(() => schema.parse(input)).toThrow(z.ZodError);
+      });
+    });
+
     describe('Invalid Operations', () => {
       it('should reject unknown operations', () => {
         // Arrange
@@ -409,6 +462,15 @@ describe('Grouped Tools Schema Validation', () => {
       };
 
       // Act & Assert
+      expect(() => schema.parse(input)).not.toThrow();
+    });
+
+    it('should accept valid batch_organize_imports operation', () => {
+      const input = {
+        operation: 'batch_organize_imports',
+        filePaths: ['/path/to/one.ts', '/path/to/two.ts'],
+      };
+
       expect(() => schema.parse(input)).not.toThrow();
     });
 
@@ -637,6 +699,52 @@ describe('Grouped Tools Schema Validation', () => {
         expect(() => schema.parse(input)).toThrow(
           /text is required for find_references/,
         );
+      });
+    });
+
+    describe('batch_find_references Operation', () => {
+      it('should accept valid batch_find_references operation', () => {
+        const input = {
+          operation: 'batch_find_references',
+          queries: [
+            {
+              filePath: '/path/to/file.ts',
+              symbol: 'myFunction',
+            },
+          ],
+        };
+
+        expect(() => schema.parse(input)).not.toThrow();
+      });
+
+      it('should reject batch_find_references without queries', () => {
+        const input = {
+          operation: 'batch_find_references',
+        };
+
+        expect(() => schema.parse(input)).toThrow(z.ZodError);
+      });
+    });
+
+    describe('find_symbol_declarations Operation', () => {
+      it('should accept valid find_symbol_declarations operation', () => {
+        const input = {
+          operation: 'find_symbol_declarations',
+          filePath: '/path/to/file.ts',
+          symbols: ['alpha', 'Beta'],
+          symbolKind: 'any',
+        };
+
+        expect(() => schema.parse(input)).not.toThrow();
+      });
+
+      it('should reject find_symbol_declarations without filePath', () => {
+        const input = {
+          operation: 'find_symbol_declarations',
+          symbols: ['alpha'],
+        };
+
+        expect(() => schema.parse(input)).toThrow(z.ZodError);
       });
     });
 

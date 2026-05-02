@@ -31,6 +31,19 @@ const projectNameSchema = z
   .string()
   .min(1, 'Project name cannot be empty')
   .optional();
+const symbolKindSchema = z
+  .enum([
+    'function',
+    'const',
+    'let',
+    'var',
+    'type',
+    'interface',
+    'class',
+    'enum',
+    'any',
+  ])
+  .optional();
 
 // File Operations Tool
 export const fileOperationsTool: GroupedTool = {
@@ -160,19 +173,35 @@ Use when: After refactoring or before commits. Use proactively.`,
   },
   operations: [
     OperationName.ORGANIZE_IMPORTS,
+    OperationName.BATCH_ORGANIZE_IMPORTS,
     OperationName.FIX_ALL,
     OperationName.REMOVE_UNUSED,
   ],
-  inputSchema: z.object({
-    operation: z.enum([
-      OperationName.ORGANIZE_IMPORTS,
-      OperationName.FIX_ALL,
-      OperationName.REMOVE_UNUSED,
-    ]),
-    filePath: z.string().min(1, 'File path cannot be empty'),
-    preview: z.boolean().optional(),
-    projectName: projectNameSchema,
-  }),
+  inputSchema: z
+    .object({
+      operation: z.enum([
+        OperationName.ORGANIZE_IMPORTS,
+        OperationName.BATCH_ORGANIZE_IMPORTS,
+        OperationName.FIX_ALL,
+        OperationName.REMOVE_UNUSED,
+      ]),
+      filePath: z.string().min(1, 'File path cannot be empty').optional(),
+      filePaths: z.array(z.string().min(1)).optional(),
+      stopOnError: z.boolean().optional(),
+      preview: z.boolean().optional(),
+      projectName: projectNameSchema,
+    })
+    .refine(
+      (data) => {
+        if (data.operation === OperationName.BATCH_ORGANIZE_IMPORTS) {
+          return !!data.filePaths && data.filePaths.length > 0;
+        }
+        return !!data.filePath;
+      },
+      {
+        message: 'filePath or filePaths is required for code quality operation',
+      },
+    ),
   async execute(args, registry) {
     const telemetry = new Telemetry();
     telemetry.start();
@@ -218,37 +247,73 @@ Use when: Renaming, extracting, or moving symbols between files. Always use this
   },
   operations: [
     OperationName.RENAME,
+    OperationName.BATCH_RENAME_SYMBOLS,
     OperationName.EXTRACT_FUNCTION,
     OperationName.EXTRACT_CONSTANT,
     OperationName.EXTRACT_VARIABLE,
     OperationName.MOVE_TO_FILE,
+    OperationName.BATCH_MOVE_SYMBOLS,
     OperationName.INFER_RETURN_TYPE,
   ],
   inputSchema: z
     .object({
       operation: z.enum([
         OperationName.RENAME,
+        OperationName.BATCH_RENAME_SYMBOLS,
         OperationName.EXTRACT_FUNCTION,
         OperationName.EXTRACT_CONSTANT,
         OperationName.EXTRACT_VARIABLE,
         OperationName.MOVE_TO_FILE,
+        OperationName.BATCH_MOVE_SYMBOLS,
         OperationName.INFER_RETURN_TYPE,
       ]),
-      filePath: z.string().min(1, 'File path cannot be empty'),
-      line: z.number().int().positive('Line must be a positive integer'),
-      text: z.string().min(1, 'Text cannot be empty'),
+      filePath: z.string().min(1, 'File path cannot be empty').optional(),
+      sourceFile: z.string().min(1).optional(),
+      line: z
+        .number()
+        .int()
+        .positive('Line must be a positive integer')
+        .optional(),
+      text: z.string().min(1, 'Text cannot be empty').optional(),
       name: z.string().optional(),
       destinationPath: z.string().min(1).optional(),
+      moves: z
+        .array(
+          z.object({
+            symbol: z.string().min(1),
+            destinationPath: z.string().min(1),
+            symbolKind: symbolKindSchema,
+          }),
+        )
+        .optional(),
+      renames: z
+        .array(
+          z.object({
+            filePath: z.string().min(1),
+            symbol: z.string().min(1),
+            newName: z.string().min(1),
+          }),
+        )
+        .optional(),
+      symbolKind: symbolKindSchema,
+      organizeImports: z.boolean().optional(),
+      stopOnError: z.boolean().optional(),
       preview: z.boolean().optional(),
       projectName: projectNameSchema,
     })
     .refine(
       (data) => {
+        if (data.operation === OperationName.BATCH_MOVE_SYMBOLS) {
+          return !!data.sourceFile && !!data.moves && data.moves.length > 0;
+        }
+        if (data.operation === OperationName.BATCH_RENAME_SYMBOLS) {
+          return !!data.renames && data.renames.length > 0;
+        }
         if (data.operation === OperationName.RENAME) return !!data.name;
-        return true;
+        return !!data.filePath && data.line !== undefined && !!data.text;
       },
       {
-        message: `name is required for ${OperationName.RENAME} operation`,
+        message: 'Invalid refactoring operation parameters',
       },
     ),
   async execute(args, registry) {
@@ -287,7 +352,7 @@ export const workspaceTool: GroupedTool = {
   title: 'Workspace',
   description: `Find references (type-aware) | Cleanup | Move+organize+fix | Restart tsserver.
 
-vs grep: Finds dynamic imports, JSDoc, type-only imports grep misses. ⚠️ Can DELETE.
+vs grep: Finds dynamic imports, JSDoc, type-only imports grep misses. Warning: Can DELETE.
 
 Use when: Before renaming/refactoring. Use find_references first to see impact.`,
   annotations: {
@@ -296,6 +361,8 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
   },
   operations: [
     OperationName.FIND_REFERENCES,
+    OperationName.BATCH_FIND_REFERENCES,
+    OperationName.FIND_SYMBOL_DECLARATIONS,
     OperationName.REFACTOR_MODULE,
     OperationName.CLEANUP_CODEBASE,
     OperationName.RESTART_TSSERVER,
@@ -304,6 +371,8 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
     .object({
       operation: z.enum([
         OperationName.FIND_REFERENCES,
+        OperationName.BATCH_FIND_REFERENCES,
+        OperationName.FIND_SYMBOL_DECLARATIONS,
         OperationName.REFACTOR_MODULE,
         OperationName.CLEANUP_CODEBASE,
         OperationName.RESTART_TSSERVER,
@@ -311,6 +380,16 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
       filePath: z.string().min(1).optional(),
       line: z.number().int().positive().optional(),
       text: z.string().min(1).optional(),
+      symbols: z.array(z.string().min(1)).optional(),
+      symbolKind: symbolKindSchema,
+      queries: z
+        .array(
+          z.object({
+            filePath: z.string().min(1),
+            symbol: z.string().min(1),
+          }),
+        )
+        .optional(),
       sourcePath: z.string().min(1).optional(),
       destinationPath: z.string().min(1).optional(),
       directory: z.string().min(1).optional(),
@@ -323,6 +402,12 @@ Use when: Before renaming/refactoring. Use find_references first to see impact.`
       (data) => {
         if (data.operation === OperationName.FIND_REFERENCES) {
           return !!data.filePath && data.line !== undefined && !!data.text;
+        }
+        if (data.operation === OperationName.BATCH_FIND_REFERENCES) {
+          return !!data.queries && data.queries.length > 0;
+        }
+        if (data.operation === OperationName.FIND_SYMBOL_DECLARATIONS) {
+          return !!data.filePath;
         }
         if (data.operation === OperationName.REFACTOR_MODULE) {
           return !!data.sourcePath && !!data.destinationPath;

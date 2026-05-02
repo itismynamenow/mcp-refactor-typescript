@@ -70,6 +70,22 @@ import './styles.css';  // Side-effect preserved
 import { a, b, c } from '../utils';  // Sorted, unused removed
 ```
 
+### batch_organize_imports
+**What**: Organize imports across multiple files in one request
+**Time**: Loops the existing organize_imports operation per file
+**Use when**: After batch moves, file splits, or generated refactors touched many imports
+
+**Example**:
+```typescript
+Input: {
+  operation: "batch_organize_imports",
+  filePaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+  stopOnError: false
+}
+
+Result: Organizes imports in each file and reports per-file success/failure
+```
+
 ### fix_all
 **What**: Apply ALL available TypeScript quick fixes
 **Safe**: Only applies compiler-approved fixes
@@ -112,6 +128,26 @@ Result: Updates 47 references across 12 files:
   ✓ All imports: import { calculateSum } → import { computeSum }
   ✓ All exports and re-exports
   ✓ JSDoc references
+```
+
+### batch_rename_symbols
+**What**: Rename multiple top-level symbols by declaration name
+**Why**: Avoid repeated "find line, rename, find next line" loops
+**Safe**: Uses the existing TypeScript-aware rename operation for each symbol
+
+**Example**:
+```typescript
+Input: {
+  operation: "batch_rename_symbols",
+  renames: [
+    { filePath: "src/math.ts", symbol: "sum", newName: "add" },
+    { filePath: "src/math.ts", symbol: "product", newName: "multiply" }
+  ],
+  preview: false,
+  stopOnError: true
+}
+
+Result: Finds each declaration line and renames all references
 ```
 
 ### extract_function
@@ -197,6 +233,28 @@ Input: {
 Result: Moves parseConfig to auto-named new file (e.g. src/parseConfig.ts)
 ```
 
+### batch_move_symbols
+**What**: Move multiple top-level symbols from one source file to destination files
+**Why**: Re-finds each declaration after earlier moves, so shifting line numbers do not matter
+**Safe**: Uses the existing move_to_file operation for each symbol
+
+**Example**:
+```typescript
+Input: {
+  operation: "batch_move_symbols",
+  sourceFile: "src/big-file.ts",
+  symbolKind: "function",
+  moves: [
+    { symbol: "parseConfig", destinationPath: "src/config/parseConfig.ts" },
+    { symbol: "formatConfig", destinationPath: "src/config/formatConfig.ts" }
+  ],
+  organizeImports: true,
+  stopOnError: true
+}
+
+Result: Moves both symbols and updates imports/exports across the project
+```
+
 ### infer_return_type
 **What**: Generate perfect return type annotations automatically
 **Benefit**: Even complex nested objects and union types - no guessing
@@ -228,6 +286,40 @@ Found 3 reference(s) in 2 file(s):
 utils.ts: Line 1: export function helper()...
 main.ts: Line 1: const result = helper();
 main.ts: Line 2: const another = helper();
+```
+
+### batch_find_references
+**What**: Find references for multiple top-level symbols in one request
+**Why**: Faster impact analysis before a large rename or file split
+
+**Example**:
+```typescript
+Input: {
+  operation: "batch_find_references",
+  queries: [
+    { filePath: "src/math.ts", symbol: "sum" },
+    { filePath: "src/math.ts", symbol: "product" }
+  ]
+}
+
+Result: Returns one result item per symbol with the existing find_references summary
+```
+
+### find_symbol_declarations
+**What**: List top-level declarations in a file
+**Returns**: symbol, kind, exported/private, start/end line, and imported dependencies used by that declaration
+**Use when**: Planning batch refactors without manually locating declaration lines
+
+**Example**:
+```typescript
+Input: {
+  operation: "find_symbol_declarations",
+  filePath: "src/big-file.ts",
+  symbols: ["parseConfig", "ConfigShape"],
+  symbolKind: "any"
+}
+
+Result: Reports declaration metadata that can feed batch_move_symbols, batch_rename_symbols, or batch_find_references
 ```
 
 ### refactor_module

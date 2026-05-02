@@ -79,6 +79,11 @@ for (const tool of groupedTools) {
           message: result.message,
           data: {
             filesChanged: result.filesChanged || [],
+            ...(result.data && typeof result.data === 'object'
+              ? result.data
+              : result.data === undefined
+                ? {}
+                : { result: result.data }),
           },
         };
 
