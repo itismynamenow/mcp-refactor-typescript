@@ -3,7 +3,7 @@
  */
 
 import { mkdir, rename } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, normalize } from 'node:path';
 import type {
   RefactorResult,
   TypeScriptServer,
@@ -126,8 +126,17 @@ export class FileMover {
     await this.ensureDirectoryExists(destinationPath);
     await rename(sourcePath, destinationPath);
 
+    const filesToReload = new Set<string>();
     for (const fileEdit of edits) {
-      await this.tsServer.reloadFile(fileEdit.fileName);
+      filesToReload.add(
+        normalize(fileEdit.fileName) === normalize(sourcePath)
+          ? destinationPath
+          : fileEdit.fileName,
+      );
+    }
+
+    for (const filePath of filesToReload) {
+      await this.tsServer.reloadFile(filePath);
     }
 
     return {

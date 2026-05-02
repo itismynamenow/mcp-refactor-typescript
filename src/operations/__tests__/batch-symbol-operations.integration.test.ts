@@ -7,7 +7,7 @@ import {
   expect,
   it,
 } from 'bun:test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TypeScriptServer } from '../../language-servers/typescript/tsserver-client.js';
 import type { BatchFindReferencesOperation } from '../batch-find-references.js';
@@ -274,5 +274,62 @@ export function gamma() {
     expect(sourceContent).toContain('alpha() + beta()');
     expect(await readFile(alphaPath, 'utf-8')).toContain('function alpha');
     expect(await readFile(betaPath, 'utf-8')).toContain('function beta');
+  });
+
+  it('should move many constants from a barrel without corrupting consumer imports', async () => {
+    const sourcePath = join(testDir, 'src', 'feature', 'index.ts');
+    const consumerPath = join(testDir, 'src', 'feature', 'consumer.ts');
+    const tuningPath = join(testDir, 'src', 'feature', 'tuning.ts');
+    await mkdir(join(testDir, 'src', 'feature'), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `export const ALPHA = 1;
+export const BETA = 2;
+export const GAMMA = 3;
+`,
+      'utf-8',
+    );
+    await writeFile(
+      consumerPath,
+      `import { ALPHA, BETA, GAMMA } from '.';
+
+export const total = ALPHA + BETA + GAMMA;
+`,
+      'utf-8',
+    );
+
+    const operation = createBatchMoveSymbolsOperation(
+      testServer!,
+    ) as BatchMoveSymbolsOperation;
+    const response = await operation.execute({
+      sourceFile: sourcePath,
+      symbolKind: 'const',
+      organizeImports: true,
+      moves: [
+        { symbol: 'ALPHA', destinationPath: tuningPath },
+        { symbol: 'BETA', destinationPath: tuningPath },
+        { symbol: 'GAMMA', destinationPath: tuningPath },
+      ],
+    });
+
+    expect(response.success).toBe(true);
+    expect(response.message).toBe('Moved 3/3 symbol(s)');
+    expect(await readFile(sourcePath, 'utf-8')).not.toContain('export const');
+
+    const consumerContent = await readFile(consumerPath, 'utf-8');
+    expect(consumerContent).toContain(
+      "import { ALPHA, BETA, GAMMA } from './tuning';",
+    );
+    expect(consumerContent).not.toContain("from '.'");
+    expect(consumerContent).not.toContain('import {  ');
+    expect(await readFile(tuningPath, 'utf-8')).toContain(
+      'export const ALPHA = 1;',
+    );
+    expect(await readFile(tuningPath, 'utf-8')).toContain(
+      'export const BETA = 2;',
+    );
+    expect(await readFile(tuningPath, 'utf-8')).toContain(
+      'export const GAMMA = 3;',
+    );
   });
 });

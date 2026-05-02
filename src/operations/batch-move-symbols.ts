@@ -1,3 +1,15 @@
+import { existsSync } from 'node:fs';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 import { z } from 'zod';
 import type { RefactorResult } from '../language-servers/typescript/tsserver-client.js';
 import { formatValidationError } from '../utils/validation-error.js';
@@ -7,6 +19,7 @@ import {
   type BatchItemResult,
   mergeFilesChanged,
 } from './shared/batch-result.js';
+import type { FileDiscovery } from './shared/file-discovery.js';
 import type { FileOperations } from './shared/file-operations.js';
 import {
   type SymbolDeclarationFinder,
@@ -37,6 +50,7 @@ export class BatchMoveSymbolsOperation {
     private moveToFile: MoveToFileOperation,
     private organizeImports: OrganizeImportsOperation,
     private fileOps: FileOperations,
+    private discovery: FileDiscovery,
   ) {}
 
   async execute(input: Record<string, unknown>): Promise<RefactorResult> {
@@ -45,6 +59,8 @@ export class BatchMoveSymbolsOperation {
       const sourceFile = this.fileOps.resolvePath(validated.sourceFile);
       const results: BatchItemResult[] = [];
       const filesChanged: RefactorResult['filesChanged'] = [];
+
+      await this.discovery.discoverRelatedFiles(sourceFile);
 
       for (const move of validated.moves) {
         try {
@@ -83,6 +99,14 @@ export class BatchMoveSymbolsOperation {
         }
       }
 
+      if (!validated.preview) {
+        const importRewriteChanges = await this.rewriteRemainingSourceImports(
+          sourceFile,
+          validated.moves,
+        );
+        mergeFilesChanged(filesChanged, importRewriteChanges);
+      }
+
       if (validated.organizeImports && !validated.preview) {
         const organizeTargets = new Set<string>([sourceFile]);
         for (const fileChange of filesChanged) {
@@ -113,5 +137,212 @@ export class BatchMoveSymbolsOperation {
         filesChanged: [],
       };
     }
+  }
+
+  private async rewriteRemainingSourceImports(
+    sourceFile: string,
+    moves: Array<{ symbol: string; destinationPath: string }>,
+  ): Promise<RefactorResult['filesChanged']> {
+    const projectRoot = this.findProjectRoot(sourceFile);
+    const projectFiles = await this.scanProjectFiles(projectRoot);
+    const movedSymbolsByDestination = new Map<string, Set<string>>();
+
+    for (const move of moves) {
+      const destinationPath = this.fileOps.resolvePath(move.destinationPath);
+      const symbols =
+        movedSymbolsByDestination.get(destinationPath) ?? new Set<string>();
+      symbols.add(move.symbol);
+      movedSymbolsByDestination.set(destinationPath, symbols);
+    }
+
+    const filesChanged: RefactorResult['filesChanged'] = [];
+
+    for (const filePath of projectFiles) {
+      const originalContent = await readFile(filePath, 'utf-8');
+      let content = originalContent;
+
+      for (const [destinationPath, symbols] of movedSymbolsByDestination) {
+        content = this.rewriteImportsForDestination(
+          content,
+          filePath,
+          sourceFile,
+          destinationPath,
+          symbols,
+        );
+      }
+
+      if (content === originalContent) continue;
+
+      await writeFile(filePath, content, 'utf-8');
+      filesChanged.push({
+        file: basename(filePath),
+        path: filePath,
+        edits: [
+          {
+            line: 1,
+            column: 1,
+            old: originalContent,
+            new: content,
+          },
+        ],
+      });
+    }
+
+    return filesChanged;
+  }
+
+  private rewriteImportsForDestination(
+    content: string,
+    importerPath: string,
+    sourceFile: string,
+    destinationPath: string,
+    movedSymbols: Set<string>,
+  ): string {
+    const importPattern =
+      /import\s+(type\s+)?\{([\s\S]*?)\}\s+from\s+(['"])([^'"]+)\3\s*;?/g;
+
+    return content.replace(
+      importPattern,
+      (fullMatch, typeKeyword, namedImports, quote, moduleSpecifier) => {
+        if (
+          !this.moduleSpecifierTargetsFile(
+            importerPath,
+            moduleSpecifier,
+            sourceFile,
+          )
+        ) {
+          return fullMatch;
+        }
+
+        const imports = namedImports
+          .split(',')
+          .map((part: string) => part.trim())
+          .filter(Boolean);
+        const movedImports: string[] = [];
+        const remainingImports: string[] = [];
+
+        for (const importedSymbol of imports) {
+          const importedName = importedSymbol.split(/\s+as\s+/)[0]?.trim();
+          if (importedName && movedSymbols.has(importedName)) {
+            movedImports.push(importedSymbol);
+          } else {
+            remainingImports.push(importedSymbol);
+          }
+        }
+
+        if (movedImports.length === 0) {
+          return fullMatch;
+        }
+
+        const sourceImport =
+          remainingImports.length > 0
+            ? `import ${typeKeyword ?? ''}{ ${remainingImports.join(', ')} } from ${quote}${moduleSpecifier}${quote};`
+            : '';
+        const destinationImport = `import ${typeKeyword ?? ''}{ ${movedImports.join(', ')} } from ${quote}${this.buildRelativeModuleSpecifier(
+          importerPath,
+          destinationPath,
+          moduleSpecifier,
+        )}${quote};`;
+
+        return [sourceImport, destinationImport].filter(Boolean).join('\n');
+      },
+    );
+  }
+
+  private moduleSpecifierTargetsFile(
+    importerPath: string,
+    moduleSpecifier: string,
+    targetFile: string,
+  ): boolean {
+    if (!moduleSpecifier.startsWith('.')) return false;
+
+    const basePath = resolve(dirname(importerPath), moduleSpecifier);
+    const candidates = [
+      basePath,
+      `${basePath}.ts`,
+      `${basePath}.tsx`,
+      `${basePath}.js`,
+      `${basePath}.jsx`,
+      join(basePath, 'index.ts'),
+      join(basePath, 'index.tsx'),
+      join(basePath, 'index.js'),
+      join(basePath, 'index.jsx'),
+    ];
+
+    return candidates.some(
+      (candidate) => normalize(candidate) === normalize(targetFile),
+    );
+  }
+
+  private buildRelativeModuleSpecifier(
+    importerPath: string,
+    destinationPath: string,
+    sourceModuleSpecifier: string,
+  ): string {
+    const destinationWithoutExtension = destinationPath.slice(
+      0,
+      -extname(destinationPath).length,
+    );
+    let specifier = relative(dirname(importerPath), destinationWithoutExtension)
+      .split(sep)
+      .join('/');
+
+    if (!specifier.startsWith('.')) {
+      specifier = `./${specifier}`;
+    }
+
+    if (sourceModuleSpecifier.endsWith('.js')) {
+      specifier += '.js';
+    }
+
+    return specifier;
+  }
+
+  private findProjectRoot(filePath: string): string {
+    let currentDir = dirname(filePath);
+
+    while (dirname(currentDir) !== currentDir) {
+      if (existsSync(join(currentDir, 'tsconfig.json'))) {
+        return currentDir;
+      }
+      currentDir = dirname(currentDir);
+    }
+
+    return dirname(filePath);
+  }
+
+  private async scanProjectFiles(root: string): Promise<string[]> {
+    const files: string[] = [];
+
+    const scan = async (directory: string): Promise<void> => {
+      const entries = await readdir(directory, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = join(directory, entry.name);
+
+        if (entry.isDirectory()) {
+          if (
+            entry.name === 'node_modules' ||
+            entry.name === 'dist' ||
+            entry.name.startsWith('.')
+          ) {
+            continue;
+          }
+          await scan(fullPath);
+          continue;
+        }
+
+        if (
+          entry.isFile() &&
+          /\.[cm]?[tj]sx?$/.test(entry.name) &&
+          !entry.name.endsWith('.d.ts')
+        ) {
+          files.push(fullPath);
+        }
+      }
+    };
+
+    await scan(root);
+    return files;
   }
 }

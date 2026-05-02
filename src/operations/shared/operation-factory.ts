@@ -80,6 +80,7 @@ export function createBatchMoveSymbolsOperation(
     createMoveToFileOperation(tsServer, cwd),
     createOrganizeImportsOperation(tsServer, cwd),
     fileOps,
+    new FileDiscovery(tsServer),
   );
 }
 

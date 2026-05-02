@@ -230,6 +230,10 @@ This might indicate:
         };
       }
 
+      for (const fileChange of filesChanged) {
+        await this.tsServer.reloadFile(fileChange.path);
+      }
+
       return {
         success: true,
         message: `Moved symbol to ${destinationPath || 'new file'}`,

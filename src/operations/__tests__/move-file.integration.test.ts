@@ -293,4 +293,32 @@ describe('api', () => {
     expect(mainContent).not.toContain('./services/data.js');
     expect(existsSync(join(testDir, 'src', 'utils', 'data.ts'))).toBe(true);
   });
+
+  it('should move a file whose own imports need updating', async () => {
+    const dependencyPath = join(testDir, 'src', 'dependency.ts');
+    const sourcePath = join(testDir, 'src', 'source.ts');
+    const destinationPath = join(testDir, 'src', 'feature', 'source.ts');
+
+    await writeFile(dependencyPath, 'export const dependency = 42;', 'utf-8');
+    await writeFile(
+      sourcePath,
+      `import { dependency } from './dependency.js';
+
+export const value = dependency;
+`,
+      'utf-8',
+    );
+
+    const response = await operation!.execute({
+      sourcePath,
+      destinationPath,
+    });
+
+    expect(response.success).toBe(true);
+    expect(existsSync(destinationPath)).toBe(true);
+    expect(existsSync(sourcePath)).toBe(false);
+    expect(await readFile(destinationPath, 'utf-8')).toContain(
+      "from '../dependency.js'",
+    );
+  });
 });
